@@ -1,14 +1,33 @@
 import { NextResponse } from 'next/server';
 
-// Global array memory buffer to hold temporary post streams
+// Global array memory buffer
 let cloudSavesDatabase: any[] = [];
+
+// Helper to add CORS headers
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(),
+  });
+}
 
 export async function POST(request: Request) {
   try {
     const postData = await request.json();
     
     if (!postData.title || !postData.contentText) {
-      return NextResponse.json({ error: "Missing required post contents." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing required post contents." },
+        { status: 400, headers: corsHeaders() }
+      );
     }
 
     const newSaveEntry = {
@@ -23,13 +42,22 @@ export async function POST(request: Request) {
     };
 
     cloudSavesDatabase.unshift(newSaveEntry);
-    return NextResponse.json({ success: true, data: newSaveEntry }, { status: 200 });
+    return NextResponse.json(
+      { success: true, data: newSaveEntry },
+      { status: 200, headers: corsHeaders() }
+    );
 
   } catch (error) {
-    return NextResponse.json({ error: "Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Server Error" },
+      { status: 500, headers: corsHeaders() }
+    );
   }
 }
 
 export async function GET() {
-  return NextResponse.json(cloudSavesDatabase, { status: 200 });
+  return NextResponse.json(
+    cloudSavesDatabase,
+    { status: 200, headers: corsHeaders() }
+  );
 }
