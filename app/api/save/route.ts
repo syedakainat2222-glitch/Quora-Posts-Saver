@@ -1,15 +1,13 @@
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+import { NextResponse } from "next/server";
+import { pool } from "@/lib/db";
 
-import { NextResponse } from 'next/server';
-
-let cloudSavesDatabase: any[] = [];
+export const dynamic = "force-dynamic";
 
 function corsHeaders() {
   return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
   };
 }
 
@@ -23,7 +21,7 @@ export async function OPTIONS() {
 export async function POST(request: Request) {
   try {
     const postData = await request.json();
-    
+
     if (!postData.title || !postData.contentText) {
       return NextResponse.json(
         { error: "Missing required post contents." },
@@ -31,24 +29,27 @@ export async function POST(request: Request) {
       );
     }
 
-    const newSaveEntry = {
-      id: Date.now(),
-      title: postData.title,
-      author: postData.author || "Unknown Author",
-      content: postData.contentText,
-      url: postData.url || "",
-      tag: postData.tag || "General",
-      type: postData.type || "Post",
-      date: new Date().toLocaleDateString()
-    };
-
-    cloudSavesDatabase.unshift(newSaveEntry);
-    return NextResponse.json(
-      { success: true, data: newSaveEntry },
-      { status: 200, headers: corsHeaders() }
+    const { rows } = await pool.query(
+      `INSERT INTO saves (title, author, content, url, tag, type)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, title, author, content, url, tag, type, created_at`,
+      [
+        postData.title,
+        postData.author || "Unknown Author",
+        postData.contentText,
+        postData.url || "",
+        postData.tag || "General",
+        postData.type || "Post",
+      ]
     );
 
+    return NextResponse.json(
+      { success: true, data: rows[0] },
+      { status: 200, headers: corsHeaders() }
+    );
   } catch (error) {
+    console.error("[v0] /api/save POST error:", error);
+
     return NextResponse.json(
       { error: "Server Error" },
       { status: 500, headers: corsHeaders() }
@@ -57,8 +58,23 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  return NextResponse.json(
-    cloudSavesDatabase,
-    { status: 200, headers: corsHeaders() }
-  );
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, author, content, url, tag, type, created_at
+       FROM saves
+       ORDER BY created_at DESC`
+    );
+
+    return NextResponse.json(rows, {
+      status: 200,
+      headers: corsHeaders(),
+    });
+  } catch (error) {
+    console.error("[v0] /api/save GET error:", error);
+
+    return NextResponse.json(
+      { error: "Server Error" },
+      { status: 500, headers: corsHeaders() }
+    );
+  }
 }
