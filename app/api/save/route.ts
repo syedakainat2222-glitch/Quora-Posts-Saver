@@ -1,33 +1,32 @@
-import { NextResponse } from "next/server"
-import { pool } from "@/lib/db"
+import { NextResponse } from "next/server";
+import { pool } from "@/lib/db";
 
-export const dynamic = "force-dynamic"
+export const dynamic = "force-dynamic";
 
-// Helper to add CORS headers so the browser extension can call this endpoint.
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
-  }
+  };
 }
 
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
     headers: corsHeaders(),
-  })
+  });
 }
 
 export async function POST(request: Request) {
   try {
-    const postData = await request.json()
+    const postData = await request.json();
 
     if (!postData.title || !postData.contentText) {
       return NextResponse.json(
         { error: "Missing required post contents." },
-        { status: 400, headers: corsHeaders() },
-      )
+        { status: 400, headers: corsHeaders() }
+      );
     }
 
     const { rows } = await pool.query(
@@ -41,19 +40,20 @@ export async function POST(request: Request) {
         postData.url || "",
         postData.tag || "General",
         postData.type || "Post",
-      ],
-    )
+      ]
+    );
 
     return NextResponse.json(
       { success: true, data: rows[0] },
-      { status: 200, headers: corsHeaders() },
-    )
+      { status: 200, headers: corsHeaders() }
+    );
   } catch (error) {
-    console.error("[v0] /api/save POST error:", error)
+    console.error("[v0] /api/save POST error:", error);
+
     return NextResponse.json(
       { error: "Server Error" },
-      { status: 500, headers: corsHeaders() },
-    )
+      { status: 500, headers: corsHeaders() }
+    );
   }
 }
 
@@ -62,14 +62,19 @@ export async function GET() {
     const { rows } = await pool.query(
       `SELECT id, title, author, content, url, tag, type, created_at
        FROM saves
-       ORDER BY created_at DESC`,
-    )
-    return NextResponse.json(rows, { status: 200, headers: corsHeaders() })
+       ORDER BY created_at DESC`
+    );
+
+    return NextResponse.json(rows, {
+      status: 200,
+      headers: corsHeaders(),
+    });
   } catch (error) {
-    console.error("[v0] /api/save GET error:", error)
+    console.error("[v0] /api/save GET error:", error);
+
     return NextResponse.json(
       { error: "Server Error" },
-      { status: 500, headers: corsHeaders() },
-    )
+      { status: 500, headers: corsHeaders() }
+    );
   }
 }
