@@ -61,19 +61,27 @@ function normalize(row: ApiRow): SaveItem {
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export default function Page() {
+  const [currentTab, setCurrentTab] = useState<string>("All Saves")
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedTag, setSelectedTag] = useState<string | null>(null)
 
   const { data, error, isLoading } = useSWR<ApiRow[]>("/api/save", fetcher, {
     refreshInterval: 5000,
   })
 
   const saves: SaveItem[] = Array.isArray(data) ? data.map(normalize) : []
+
+  // Filter items by tag if a specific tag is clicked/active
+  const displayedSaves = selectedTag 
+    ? saves.filter(s => s.tag.toLowerCase() === selectedTag.toLowerCase())
+    : saves
+
   const selected =
-    saves.find((s) => s.id === selectedId) ?? saves[0] ?? null
+    displayedSaves.find((s) => s.id === selectedId) ?? displayedSaves[0] ?? null
 
   if (isLoading) {
     return (
-      <main className="flex h-dvh items-center justify-center overflow-hidden text-muted-foreground">
+      <main className="flex h-dvh items-center justify-center overflow-hidden text-muted-foreground bg-background">
         Loading your cloud archive…
       </main>
     )
@@ -81,38 +89,104 @@ export default function Page() {
 
   if (error) {
     return (
-      <main className="flex h-dvh items-center justify-center overflow-hidden text-muted-foreground">
+      <main className="flex h-dvh items-center justify-center overflow-hidden text-muted-foreground bg-background">
         Could not reach the cloud archive. Please try again.
       </main>
     )
   }
 
-  if (saves.length === 0) {
-    return (
-      <main className="flex h-dvh overflow-hidden">
-        <Sidebar className="hidden lg:flex" />
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-          <p className="text-lg font-semibold text-foreground">
-            No saved posts yet
-          </p>
-          <p className="max-w-sm text-sm text-muted-foreground text-pretty">
-            Save a Quora post or reply from the browser extension and it will
-            appear here automatically.
-          </p>
-        </div>
-      </main>
-    )
+  // Helper function to handle custom navigation triggers
+  const handleTabChange = (tabName: string, tagName: string | null = null) => {
+    setCurrentTab(tabName)
+    setSelectedTag(tagName)
+    setSelectedId(null) // reset item selection when jumping tabs
   }
 
   return (
-    <main className="flex h-dvh overflow-hidden">
-      <Sidebar className="hidden lg:flex" />
-      <FeedList
-        items={saves}
-        selectedId={selected ? selected.id : ""}
-        onSelect={setSelectedId}
+    <main className="flex h-dvh overflow-hidden w-full bg-background text-foreground">
+      <Sidebar 
+        className="hidden lg:flex" 
+        currentTab={currentTab} 
+        onTabChange={handleTabChange}
+        selectedTag={selectedTag}
       />
-      {selected ? <ReadingView item={selected} /> : null}
+      
+      {/* ROUTER PANEL CONTENT */}
+      {currentTab === "All Saves" && (
+        <>
+          {displayedSaves.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+              <p className="text-lg font-semibold text-foreground">
+                {selectedTag ? `No items in ${selectedTag}` : "No saved posts yet"}
+              </p>
+              <p className="max-w-sm text-sm text-muted-foreground text-pretty">
+                {selectedTag 
+                  ? "You haven't added any clips under this specific collection category filter yet."
+                  : "Save a Quora post or reply from the browser extension and it will appear here automatically."}
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-1 overflow-hidden">
+              <FeedList
+                items={displayedSaves}
+                selectedId={selected ? selected.id : ""}
+                onSelect={setSelectedId}
+              />
+              {selected ? <ReadingView item={selected} /> : null}
+            </div>
+          )}
+        </>
+      )}
+
+      {currentTab === "Folders/Tags" && (
+        <div className="flex-1 p-10 overflow-y-auto bg-card border-l border-border">
+          <h1 className="text-2xl font-bold text-foreground mb-2">📁 Folders / Tags Archive</h1>
+          <p className="text-sm text-muted-foreground mb-8">Manage your curated tags or click a collection folder in the sidebar panel to slice your workspace.</p>
+          <div className="p-8 border border-dashed border-border rounded-xl text-center max-w-xl text-muted-foreground text-sm">
+            Tag organization controls and automated folder sorting structures will load in version 1.3 updates. Use the sidebar to filter clips.
+          </div>
+        </div>
+      )}
+
+      {currentTab === "Connected Blogs" && (
+        <div className="flex-1 p-10 overflow-y-auto bg-card border-l border-border">
+          <h1 className="text-2xl font-bold text-foreground mb-2">🔗 Connected Blogging Sync</h1>
+          <p className="text-sm text-muted-foreground mb-8">Link external distribution systems to automatically format and broadcast text drafts directly from your feed canvas.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl">
+            <div className="p-5 border border-border rounded-xl bg-background/50 flex justify-between items-center">
+              <div>
+                <h4 className="font-semibold text-sm text-foreground">WordPress Core</h4>
+                <p className="text-xs text-muted-foreground">Sync drafts to self-hosted instances</p>
+              </div>
+              <button className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">Link Profile</button>
+            </div>
+            <div className="p-5 border border-border rounded-xl bg-background/50 flex justify-between items-center">
+              <div>
+                <h4 className="font-semibold text-sm text-foreground">Medium Stories</h4>
+                <p className="text-xs text-muted-foreground">Publish clips straight into feed layouts</p>
+              </div>
+              <button className="px-3 py-1.5 bg-zinc-800 text-white dark:bg-zinc-200 dark:text-black rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">Link Profile</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {currentTab === "Settings" && (
+        <div className="flex-1 p-10 overflow-y-auto bg-card border-l border-border">
+          <h1 className="text-2xl font-bold text-foreground mb-2">⚙️ Application Settings</h1>
+          <p className="text-sm text-muted-foreground mb-6">Verify account profiles, metadata indexes, and backend infrastructure state handles.</p>
+          <div className="max-w-md divide-y divide-border border-t border-b border-border py-2">
+            <div className="flex justify-between items-center py-3 text-sm">
+              <span className="text-muted-foreground">Cloud Sync Engine</span>
+              <span className="text-emerald-500 font-semibold flex items-center gap-1.5">● Neon Postgres Active</span>
+            </div>
+            <div className="flex justify-between items-center py-3 text-sm">
+              <span className="text-muted-foreground">Extension Integration Channel</span>
+              <span className="text-foreground font-medium">Enabled (v1.2)</span>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
