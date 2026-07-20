@@ -4,6 +4,10 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { HardDrive, KeyRound, Mail, ArrowRight } from "lucide-react"
 
+// Pull keys out of your secure environmental config variables automatically
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
 export default function LoginPage() {
   const router = useRouter()
   const [isSignUp, setIsSignUp] = useState(false)
@@ -18,16 +22,42 @@ export default function LoginPage() {
     setErrorMsg("")
 
     try {
-      // Temporary simulated account validation sequence
-      // In our upcoming step, this hooks cleanly directly to your active Supabase Client Client SDK
       if (password.length < 6) {
         throw new Error("Password must be at least 6 characters long.")
       }
 
-      console.log(`Authenticating: ${email} via ${isSignUp ? "Sign Up" : "Sign In"}`)
-      
-      // Auto-reroute user to their beautiful dashboard view upon successful authentication pass
-      router.push("/")
+      // Determine the correct Supabase REST endpoint path depending on toggle state
+      const endpoint = isSignUp ? "signup" : "token?grant_type=password"
+      const authUrl = `${SUPABASE_URL}/auth/v1/${endpoint}`
+
+      const response = await fetch(authUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_ANON_KEY || ""
+        },
+        body: JSON.stringify({ email, password })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error_description || data.error || "Authentication procedure failed.")
+      }
+
+      // If we are logging in, extract the access token session parameters and save it locally
+      if (!isSignUp && data.access_token) {
+        // Securely drop the session token into browser local storage or cookies
+        localStorage.setItem("qsaver_session_token", data.access_token)
+        document.cookie = `session_token=${data.access_token}; path=/; max-age=604800; SameSite=Lax; Secure`
+        
+        alert("🎉 Login Successful! Redirecting to your workspace feed dashboard...")
+        router.push("/")
+      } else if (isSignUp) {
+        alert("✅ Account created successfully! Please check your email inbox to confirm validation, then sign in.")
+        setIsSignUp(false) // Toggle back to login block view
+      }
+
     } catch (err: any) {
       setErrorMsg(err.message || "An authentication error occurred.")
     } finally {
