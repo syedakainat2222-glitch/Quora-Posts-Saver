@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { Sidebar } from "@/components/sidebar"
 import { FeedList } from "@/components/feed-list"
@@ -51,38 +52,61 @@ function normalize(row: ApiRow): SaveItem {
       day: "numeric",
     }),
     relative: relativeTime(row.created_at),
-    tag: row.tag || "General",
+    tag: folderNameNormalization(row.tag),
     sourceUrl: row.url || "",
     snippet: content.slice(0, 160) + (content.length > 160 ? "…" : ""),
     body: paragraphs.length ? paragraphs : [content],
   }
 }
 
+function folderNameNormalization(tag: string): string {
+  if (!tag) return "General"
+  return tag.charAt(0).toUpperCase() + tag.slice(1).toLowerCase()
+}
+
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export default function Page() {
+  const router = useRouter()
+  
+  // ----- ACCOUNT PROTECTION SESSION STATE GUARD -----
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [currentTab, setCurrentTab] = useState<string>("All Saves")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
 
-  const { data, error, isLoading } = useSWR<ApiRow[]>("/api/save", fetcher, {
-    refreshInterval: 5000,
-  })
+  useEffect(() => {
+    // Check if a secure Supabase session token exists in local cookie headers or storage
+    const localToken = localStorage.getItem("qsaver_session_token")
+    const cookieToken = document.cookie.split("; ").find(row => row.startsWith("session_token="))
+
+    if (!localToken && !cookieToken) {
+      // Missing identity parameters: Redirect to login terminal gate instantly
+      setIsAuthenticated(false)
+      router.push("/login")
+    } else {
+      setIsAuthenticated(true)
+    }
+  }, [router])
+
+  const { data, error, isLoading } = useSWR<ApiRow[]>(
+    isAuthenticated ? "/api/save" : null, // Only fetch data records if verified logged in!
+    fetcher, 
+    { refreshInterval: 5000 }
+  )
 
   const saves: SaveItem[] = Array.isArray(data) ? data.map(normalize) : []
-
-  // Filter items by tag if a specific tag is clicked/active
   const displayedSaves = selectedTag 
     ? saves.filter(s => s.tag.toLowerCase() === selectedTag.toLowerCase())
     : saves
 
-  const selected =
-    displayedSaves.find((s) => s.id === selectedId) ?? displayedSaves[0] ?? null
+  const selected = displayedSaves.find((s) => s.id === selectedId) ?? displayedSaves[0] ?? null
 
-  if (isLoading) {
+  // 1. BLOCK RENDER LAYER WHILE GUARD VERIFIES IDENTITY
+  if (isAuthenticated === null || isAuthenticated === false || isLoading) {
     return (
-      <main className="flex h-dvh items-center justify-center overflow-hidden text-muted-foreground bg-background">
-        Loading your cloud archive…
+      <main className="flex h-dvh items-center justify-center overflow-hidden text-muted-foreground bg-background font-medium tracking-wide">
+        Verifying secure cloud access session credentials…
       </main>
     )
   }
@@ -95,15 +119,14 @@ export default function Page() {
     )
   }
 
-  // Helper function to handle custom navigation triggers
   const handleTabChange = (tabName: string, tagName: string | null = null) => {
     setCurrentTab(tabName)
     setSelectedTag(tagName)
-    setSelectedId(null) // reset item selection when jumping tabs
+    setSelectedId(null)
   }
 
   return (
-    <main className="flex h-dvh overflow-hidden w-full bg-background text-foreground">
+    <main className="flex h-dvh overflow-hidden w-full bg-background text-foreground animate-in fade-in duration-300">
       <Sidebar 
         className="hidden lg:flex" 
         currentTab={currentTab} 
@@ -111,7 +134,6 @@ export default function Page() {
         selectedTag={selectedTag}
       />
       
-      {/* ROUTER PANEL CONTENT */}
       {currentTab === "All Saves" && (
         <>
           {displayedSaves.length === 0 ? (
