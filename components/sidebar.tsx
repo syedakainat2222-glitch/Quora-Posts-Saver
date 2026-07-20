@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import {
   HardDrive,
   Layers,
@@ -8,6 +9,7 @@ import {
   Settings,
   Hash,
   Crown,
+  LogOut, // Added clean logout icon asset utility
 } from "lucide-react"
 import { folders } from "@/lib/saves"
 import { cn } from "@/lib/utils"
@@ -27,6 +29,20 @@ interface SidebarProps {
 }
 
 export function Sidebar({ className, currentTab, onTabChange, selectedTag }: SidebarProps) {
+  const router = useRouter()
+
+  // 1. ADD INTERACTIVE LOGOUT SESSION DELETION ACTION METHOD
+  const handleLogOutAction = () => {
+    // Purge session variables out of browser security context storage frames
+    localStorage.removeItem("qsaver_session_token")
+    document.cookie = "session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure"
+    
+    alert("🔒 Logged out of your session safely! Returning to authentication screen.")
+    
+    // Bounce user back to login portal screen
+    router.push("/login")
+  }
+
   return (
     <aside
       className={cn(
@@ -100,10 +116,10 @@ export function Sidebar({ className, currentTab, onTabChange, selectedTag }: Sid
 
       <div className="flex-1" />
 
-      {/* Premium Profile Banner Card Layout */}
-      <div className="m-3 rounded-xl border border-sidebar-border bg-card p-3">
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
+      {/* Profile banner + INTEGRATED LOG OUT CLICK BUTTON BOX */}
+      <div className="m-3 rounded-xl border border-sidebar-border bg-card p-3 flex items-center justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
             SM
           </div>
           <div className="min-w-0 leading-tight">
@@ -116,7 +132,17 @@ export function Sidebar({ className, currentTab, onTabChange, selectedTag }: Sid
             </p>
           </div>
         </div>
+        
+        {/* INTERACTIVE CLICKABLE LOGOUT TRIPPED UTILITY LAYOUT */}
+        <button
+          onClick={handleLogOutAction}
+          title="Sign Out of Account"
+          className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-50/50 dark:hover:bg-red-950/20 rounded-lg transition-colors border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
+        >
+          <LogOut className="size-4.5" />
+        </button>
       </div>
+
     </aside>
   )
 }
