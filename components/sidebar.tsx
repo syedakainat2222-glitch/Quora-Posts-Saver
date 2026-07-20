@@ -13,13 +13,20 @@ import { folders } from "@/lib/saves"
 import { cn } from "@/lib/utils"
 
 const nav = [
-  { name: "All Saves", icon: Layers, active: true },
-  { name: "Folders/Tags", icon: Tags, active: false },
-  { name: "Connected Blogs", icon: Rss, active: false },
-  { name: "Settings", icon: Settings, active: false },
+  { name: "All Saves", icon: Layers },
+  { name: "Folders/Tags", icon: Tags },
+  { name: "Connected Blogs", icon: Rss },
+  { name: "Settings", icon: Settings },
 ]
 
-export function Sidebar({ className }: { className?: string }) {
+interface SidebarProps {
+  className?: string
+  currentTab: string
+  onTabChange: (tabName: string, tagName: string | null) => void
+  selectedTag: string | null
+}
+
+export function Sidebar({ className, currentTab, onTabChange, selectedTag }: SidebarProps) {
   return (
     <aside
       className={cn(
@@ -27,7 +34,7 @@ export function Sidebar({ className }: { className?: string }) {
         className,
       )}
     >
-      {/* Logo */}
+      {/* Logo Container */}
       <div className="flex items-center gap-2.5 px-5 py-5">
         <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <HardDrive className="size-5" />
@@ -38,51 +45,62 @@ export function Sidebar({ className }: { className?: string }) {
         </div>
       </div>
 
-      {/* Nav */}
+      {/* Main Tab Navigation Link Utilities */}
       <nav className="flex flex-col gap-1 px-3">
-        {nav.map((item) => (
-          <a
-            key={item.name}
-            href="#"
-            aria-current={item.active ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-              item.active
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-sidebar-foreground hover:bg-sidebar-accent/60",
-            )}
-          >
-            <item.icon className="size-4" />
-            {item.name}
-          </a>
-        ))}
+        {nav.map((item) => {
+          const isButtonActive = currentTab === item.name && selectedTag === null;
+          return (
+            <button
+              key={item.name}
+              onClick={() => onTabChange(item.name, null)}
+              aria-current={isButtonActive ? "page" : undefined}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors text-left border-none bg-transparent cursor-pointer",
+                isButtonActive
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent/60",
+              )}
+            >
+              <item.icon className="size-4 shrink-0" />
+              {item.name}
+            </button>
+          )
+        })}
       </nav>
 
-      {/* Folders / Tags */}
+      {/* Folders / Tags Subsection */}
       <div className="mt-6 px-3">
         <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Folders / Tags
         </p>
         <div className="flex flex-col gap-0.5">
-          {folders.map((folder) => (
-            <a
-              key={folder.name}
-              href="#"
-              className="flex items-center justify-between rounded-lg px-3 py-1.5 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent/60"
-            >
-              <span className="flex items-center gap-2.5">
-                <Hash className="size-3.5 text-muted-foreground" />
-                {folder.name}
-              </span>
-              <span className="text-xs text-muted-foreground">{folder.count}</span>
-            </a>
-          ))}
+          {folders.map((folder) => {
+            const isTagActive = currentTab === "All Saves" && selectedTag?.toLowerCase() === folder.name.toLowerCase();
+            return (
+              <button
+                key={folder.name}
+                onClick={() => onTabChange("All Saves", folder.name)}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors text-left border-none bg-transparent cursor-pointer",
+                  isTagActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/60"
+                )}
+              >
+                <span className="flex items-center gap-2.5 truncate">
+                  <Hash className="size-3.5 text-muted-foreground shrink-0" />
+                  <span className="truncate">{folder.name}</span>
+                </span>
+                <span className="text-xs text-muted-foreground px-1.5">{folder.count}</span>
+              </button>
+            )
+          })}
         </div>
       </div>
 
       <div className="flex-1" />
 
-      {/* Profile banner */}
+      {/* Premium Profile Banner Card Layout */}
       <div className="m-3 rounded-xl border border-sidebar-border bg-card p-3">
         <div className="flex items-center gap-3">
           <div className="flex size-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
