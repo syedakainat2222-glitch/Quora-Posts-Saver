@@ -28,17 +28,20 @@ async function getUserIdFromToken(token: string): Promise<string | null> {
 
   try {
     console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        apikey: supabaseAnonKey,
-      },
-    });
+const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+  headers: {
+    Authorization: `Bearer ${token}`,
+    apikey: supabaseAnonKey,
+  },
+});
 
-    if (!response.ok) {
-      console.error("Token verification failed:", response.status);
-      return null;
-    }
+console.log("Status:", response.status);
+console.log("Response:", await response.text());
+
+if (!response.ok) {
+  console.error("Token verification failed:", response.status);
+  return null;
+}
 
     const userData = await response.json();
     return userData.id || null;
