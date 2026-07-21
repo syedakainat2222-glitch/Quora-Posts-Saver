@@ -76,9 +76,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Insert into database
+    // ✅ FIXED: Insert into "saved_posts" (not "saves")
     const { rows } = await pool.query(
-      `INSERT INTO saves (user_id, title, author, content, url, tag, type)
+      `INSERT INTO saved_posts (user_id, title, author, content, url, tag, type)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, title, author, content, url, tag, type, created_at`,
       [
@@ -109,7 +109,6 @@ export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      // Return empty array if not authenticated (public view)
       return NextResponse.json([], { status: 200, headers: corsHeaders() });
     }
 
@@ -120,10 +119,10 @@ export async function GET(request: Request) {
       return NextResponse.json([], { status: 200, headers: corsHeaders() });
     }
 
-    // Query only this user's saves
+    // ✅ FIXED: Select from "saved_posts" (not "saves")
     const { rows } = await pool.query(
       `SELECT id, title, author, content, url, tag, type, created_at
-       FROM saves
+       FROM saved_posts
        WHERE user_id = $1
        ORDER BY created_at DESC`,
       [userId]
