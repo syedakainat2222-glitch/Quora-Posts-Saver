@@ -9,7 +9,7 @@ import {
   Settings,
   Hash,
   Crown,
-  LogOut, // Added clean logout icon asset utility
+  LogOut,
 } from "lucide-react"
 import { folders } from "@/lib/saves"
 import { cn } from "@/lib/utils"
@@ -26,22 +26,26 @@ interface SidebarProps {
   currentTab: string
   onTabChange: (tabName: string, tagName: string | null) => void
   selectedTag: string | null
+  displayName: string // Receive dynamic account profile string elements safely
 }
 
-export function Sidebar({ className, currentTab, onTabChange, selectedTag }: SidebarProps) {
+export function Sidebar({ className, currentTab, onTabChange, selectedTag, displayName }: SidebarProps) {
   const router = useRouter()
 
-  // 1. ADD INTERACTIVE LOGOUT SESSION DELETION ACTION METHOD
   const handleLogOutAction = () => {
-    // Purge session variables out of browser security context storage frames
     localStorage.removeItem("qsaver_session_token")
     document.cookie = "session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure"
-    
     alert("🔒 Logged out of your session safely! Returning to authentication screen.")
-    
-    // Bounce user back to login portal screen
     router.push("/login")
   }
+
+  // Generate a clean 2-character avatar initials block from incoming text strings dynamically
+  const profileInitials = displayName
+    .split(" ")
+    .map(n => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "US";
 
   return (
     <aside
@@ -116,24 +120,23 @@ export function Sidebar({ className, currentTab, onTabChange, selectedTag }: Sid
 
       <div className="flex-1" />
 
-      {/* Profile banner + INTEGRATED LOG OUT CLICK BUTTON BOX */}
+      {/* Profile banner + RE-WIRED DYNAMIC FIELDS CONTROLS */}
       <div className="m-3 rounded-xl border border-sidebar-border bg-card p-3 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
-            SM
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-foreground">
+            {profileInitials} {/* Dynamic initials block rendering */}
           </div>
           <div className="min-w-0 leading-tight">
             <p className="truncate text-sm font-medium text-foreground">
-              Smooaa Mhara
+              {displayName} {/* Dynamic name text block sync */}
             </p>
             <p className="flex items-center gap-1 text-xs text-primary">
               <Crown className="size-3" />
-              Premium
+              Premium User
             </p>
           </div>
         </div>
         
-        {/* INTERACTIVE CLICKABLE LOGOUT TRIPPED UTILITY LAYOUT */}
         <button
           onClick={handleLogOutAction}
           title="Sign Out of Account"
