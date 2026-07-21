@@ -27,6 +27,7 @@ async function getUserIdFromToken(token: string): Promise<string | null> {
   }
 
   try {
+    console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
     const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: {
         Authorization: `Bearer ${token}`,
