@@ -69,28 +69,38 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json())
 export default function Page() {
   const router = useRouter()
   
-  // ----- ACCOUNT PROTECTION SESSION STATE GUARD -----
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [currentTab, setCurrentTab] = useState<string>("All Saves")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
 
+  // ----- DYNAMIC PROFILE INITIALIZATION STATE -----
+  const [userDisplayName, setUserDisplayName] = useState<string>("New User")
+  const [inputName, setInputName] = useState<string>("")
+
   useEffect(() => {
-    // Check if a secure Supabase session token exists in local cookie headers or storage
     const localToken = localStorage.getItem("qsaver_session_token")
     const cookieToken = document.cookie.split("; ").find(row => row.startsWith("session_token="))
 
     if (!localToken && !cookieToken) {
-      // Missing identity parameters: Redirect to login terminal gate instantly
       setIsAuthenticated(false)
       router.push("/login")
     } else {
       setIsAuthenticated(true)
+      
+      // Load saved display name from local preference context or fallback to profile data elements
+      const savedName = localStorage.getItem("qsaver_display_name")
+      if (savedName) {
+        setUserDisplayName(savedName)
+        setInputName(savedName)
+      } else {
+        setInputName("New User")
+      }
     }
   }, [router])
 
   const { data, error, isLoading } = useSWR<ApiRow[]>(
-    isAuthenticated ? "/api/save" : null, // Only fetch data records if verified logged in!
+    isAuthenticated ? "/api/save" : null,
     fetcher, 
     { refreshInterval: 5000 }
   )
@@ -102,7 +112,15 @@ export default function Page() {
 
   const selected = displayedSaves.find((s) => s.id === selectedId) ?? displayedSaves[0] ?? null
 
-  // 1. BLOCK RENDER LAYER WHILE GUARD VERIFIES IDENTITY
+  const handleUpdateProfileName = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!inputName.trim()) return
+    
+    setUserDisplayName(inputName.trim())
+    localStorage.setItem("qsaver_display_name", inputName.trim())
+    alert("✨ Profile updated successfully!")
+  }
+
   if (isAuthenticated === null || isAuthenticated === false || isLoading) {
     return (
       <main className="flex h-dvh items-center justify-center overflow-hidden text-muted-foreground bg-background font-medium tracking-wide">
@@ -126,14 +144,14 @@ export default function Page() {
   }
 
   return (
-    <main className="flex h-dvh overflow-hidden w-full bg-background text-foreground animate-in fade-in duration-300">
+    <main className="flex h-dvh overflow-hidden w-full bg-background text-foreground">
       <Sidebar 
-        className="hidden lg:flex" 
         currentTab={currentTab} 
         onTabChange={handleTabChange}
-        selectedTag={selectedTag}
+        displayName={userDisplayName}
       />
-      
+
+      {/* ALL SAVES TAB */}
       {currentTab === "All Saves" && (
         <>
           {displayedSaves.length === 0 ? (
@@ -160,6 +178,7 @@ export default function Page() {
         </>
       )}
 
+      {/* FOLDERS/TAGS TAB */}
       {currentTab === "Folders/Tags" && (
         <div className="flex-1 p-10 overflow-y-auto bg-card border-l border-border">
           <h1 className="text-2xl font-bold text-foreground mb-2">📁 Folders / Tags Archive</h1>
@@ -170,6 +189,7 @@ export default function Page() {
         </div>
       )}
 
+      {/* CONNECTED BLOGS TAB */}
       {currentTab === "Connected Blogs" && (
         <div className="flex-1 p-10 overflow-y-auto bg-card border-l border-border">
           <h1 className="text-2xl font-bold text-foreground mb-2">🔗 Connected Blogging Sync</h1>
@@ -185,7 +205,7 @@ export default function Page() {
             <div className="p-5 border border-border rounded-xl bg-background/50 flex justify-between items-center">
               <div>
                 <h4 className="font-semibold text-sm text-foreground">Medium Stories</h4>
-                <p className="text-xs text-muted-foreground">Publish clips straight into feed layouts</p>
+                <p className="text-xs text-muted-foreground">Push clips straight into feed layouts</p>
               </div>
               <button className="px-3 py-1.5 bg-zinc-800 text-white dark:bg-zinc-200 dark:text-black rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">Link Profile</button>
             </div>
@@ -193,18 +213,47 @@ export default function Page() {
         </div>
       )}
 
+      {/* SETTINGS TAB */}
       {currentTab === "Settings" && (
-        <div className="flex-1 p-10 overflow-y-auto bg-card border-l border-border">
-          <h1 className="text-2xl font-bold text-foreground mb-2">⚙️ Application Settings</h1>
-          <p className="text-sm text-muted-foreground mb-6">Verify account profiles, metadata indexes, and backend infrastructure state handles.</p>
+        <div className="flex-1 p-10 overflow-y-auto bg-card border-l border-border space-y-8">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground mb-2">⚙️ Application Settings</h1>
+            <p className="text-sm text-muted-foreground">Verify account profiles, metadata indexes, and backend infrastructure state handles.</p>
+          </div>
+
+          {/* EDIT PROFILE COMPONENT CARD */}
+          <div className="max-w-md border border-border rounded-xl p-6 bg-background space-y-4">
+            <h3 className="text-sm font-bold text-foreground">👤 Edit User Profile Workspace</h3>
+            <form onSubmit={handleUpdateProfileName} className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1">Display Full Name</label>
+                <input 
+                  type="text" 
+                  value={inputName}
+                  onChange={(e) => setInputName(e.target.value)}
+                  placeholder="Enter your name"
+                  className="w-full text-sm rounded-lg border border-border p-2 bg-transparent focus:border-primary outline-none"
+                />
+              </div>
+              <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-semibold text-xs rounded-lg hover:bg-blue-700 cursor-pointer">
+                Save Display Name
+              </button>
+            </form>
+          </div>
+
+          {/* SYNC STATUS */}
           <div className="max-w-md divide-y divide-border border-t border-b border-border py-2">
-            <div className="flex justify-between items-center py-3 text-sm">
+            <div className="flex justify-between text-sm py-2">
               <span className="text-muted-foreground">Cloud Sync Engine</span>
-              <span className="text-emerald-500 font-semibold flex items-center gap-1.5">● Neon Postgres Active</span>
+              <span className="text-green-600 font-medium">● Active</span>
             </div>
-            <div className="flex justify-between items-center py-3 text-sm">
+            <div className="flex justify-between text-sm py-2">
+              <span className="text-muted-foreground">Neon Postgres</span>
+              <span className="text-green-600 font-medium">● Connected</span>
+            </div>
+            <div className="flex justify-between text-sm py-2">
               <span className="text-muted-foreground">Extension Integration Channel</span>
-              <span className="text-foreground font-medium">Enabled (v1.2)</span>
+              <span className="text-blue-600 font-medium">Enabled (v1.2)</span>
             </div>
           </div>
         </div>
