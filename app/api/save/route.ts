@@ -2,96 +2,105 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import { NextResponse } from "next/server";
+import { pool } from "@/lib/db";
 
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Content-Type, Authorization"
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 }
 
 export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: corsHeaders()
-  });
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
+}
+
+// Helper: Verify token with Supabase and get user ID
+async function getUserIdFromToken(token: string): Promise<string | null> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("Supabase environment variables missing");
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: supabaseAnonKey,
+      },
+    });
+
+    if (!response.ok) {
+      console.error("Token verification failed:", response.status);
+      return null;
+    }
+
+    const userData = await response.json();
+    return userData.id || null;
+  } catch (error) {
+    console.error("Error verifying token:", error);
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
   try {
     const authHeader = request.headers.get("Authorization");
-
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
-        {
-          error: "Missing Authorization header."
-        },
-        {
-          status: 401,
-          headers: corsHeaders()
-        }
+        { error: "Missing or invalid Authorization header." },
+        { status: 401, headers: corsHeaders() }
       );
     }
 
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.split(" ")[1];
+
+    // Verify token and get user ID
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Invalid or expired session." },
+        { status: 401, headers: corsHeaders() }
+      );
+    }
 
     const body = await request.json();
-
     if (!body.title || !body.contentText) {
       return NextResponse.json(
-        {
-          error: "Missing required fields."
-        },
-        {
-          status: 400,
-          headers: corsHeaders()
-        }
+        { error: "Missing required fields: title and contentText." },
+        { status: 400, headers: corsHeaders() }
       );
     }
 
-    const saveObject = {
-      userToken: token,
-      title: body.title,
-      author: body.author || "Unknown",
-      content: body.contentText,
-      url: body.url || "",
-      tag: body.tag || "General",
-      type: body.type || "Post",
-      createdAt: new Date().toISOString()
-    };
-
-    /*
-      NEXT STEP
-
-      Save saveObject into Supabase/Postgres.
-
-      Right now we're simply returning success.
-    */
-
-    return NextResponse.json(
-      {
-        success: true,
-        data: saveObject
-      },
-      {
-        status: 200,
-        headers: corsHeaders()
-      }
+    // Insert into database
+    const { rows } = await pool.query(
+      `INSERT INTO saves (user_id, title, author, content, url, tag, type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, title, author, content, url, tag, type, created_at`,
+      [
+        userId,
+        body.title,
+        body.author || "Unknown Author",
+        body.contentText,
+        body.url || "",
+        body.tag || "General",
+        body.type || "Post",
+      ]
     );
 
-  } catch (error) {
-    console.error(error);
-
     return NextResponse.json(
-      {
-        error: "Internal Server Error"
-      },
-      {
-        status: 500,
-        headers: corsHeaders()
-      }
+      { success: true, data: rows[0] },
+      { status: 200, headers: corsHeaders() }
+    );
+  } catch (error) {
+    console.error("POST error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500, headers: corsHeaders() }
     );
   }
 }
@@ -99,42 +108,33 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get("Authorization");
-
-    if (!authHeader) {
-      return NextResponse.json(
-        [],
-        {
-          status: 200,
-          headers: corsHeaders()
-        }
-      );
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      // Return empty array if not authenticated (public view)
+      return NextResponse.json([], { status: 200, headers: corsHeaders() });
     }
 
-    /*
-      Later:
+    const token = authHeader.split(" ")[1];
+    const userId = await getUserIdFromToken(token);
 
-      Verify Supabase JWT
+    if (!userId) {
+      return NextResponse.json([], { status: 200, headers: corsHeaders() });
+    }
 
-      Query only that user's saves
-
-      Return them here.
-    */
-
-    return NextResponse.json(
-      [],
-      {
-        status: 200,
-        headers: corsHeaders()
-      }
+    // Query only this user's saves
+    const { rows } = await pool.query(
+      `SELECT id, title, author, content, url, tag, type, created_at
+       FROM saves
+       WHERE user_id = $1
+       ORDER BY created_at DESC`,
+      [userId]
     );
 
+    return NextResponse.json(rows, { status: 200, headers: corsHeaders() });
   } catch (error) {
+    console.error("GET error:", error);
     return NextResponse.json(
-      [],
-      {
-        status: 500,
-        headers: corsHeaders()
-      }
+      { error: "Internal Server Error" },
+      { status: 500, headers: corsHeaders() }
     );
   }
 }
