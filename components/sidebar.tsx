@@ -130,10 +130,6 @@ export function Sidebar({ className, currentTab, onTabChange, selectedTag, displ
             <p className="truncate text-sm font-medium text-foreground">
               {displayName} {/* Dynamic name text block sync */}
             </p>
-            <p className="flex items-center gap-1 text-xs text-primary">
-              <Crown className="size-3" />
-              Premium User
-            </p>
           </div>
         </div>
         
