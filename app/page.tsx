@@ -64,7 +64,15 @@ function folderNameNormalization(tag: string): string {
   return tag.charAt(0).toUpperCase() + tag.slice(1).toLowerCase()
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+// ✅ FIXED: fetcher now sends the Authorization header with the token
+const fetcher = (url: string) => {
+  const token = localStorage.getItem("qsaver_session_token")
+  return fetch(url, {
+    headers: {
+      Authorization: token ? `Bearer ${token}` : "",
+    },
+  }).then((r) => r.json())
+}
 
 export default function Page() {
   const router = useRouter()
