@@ -6,7 +6,7 @@ const globalForPool = globalThis as unknown as { pgPool?: Pool };
 export const pool =
   globalForPool.pgPool ??
   new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.POSTGRES_URL,
     max: 3, // Maximum connections in the pool
     ssl: { rejectUnauthorized: false }, // Required for Supabase / Neon
   });
