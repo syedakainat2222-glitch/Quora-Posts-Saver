@@ -27,21 +27,17 @@ async function getUserIdFromToken(token: string): Promise<string | null> {
   }
 
   try {
-    console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-  headers: {
-    Authorization: `Bearer ${token}`,
-    apikey: supabaseAnonKey,
-  },
-});
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: supabaseAnonKey,
+      },
+    });
 
-console.log("Status:", response.status);
-console.log("Response:", await response.text());
-
-if (!response.ok) {
-  console.error("Token verification failed:", response.status);
-  return null;
-}
+    if (!response.ok) {
+      console.error("Token verification failed:", response.status);
+      return null;
+    }
 
     const userData = await response.json();
     return userData.id || null;
@@ -72,7 +68,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
+    // Read body as text and parse manually to avoid "Body already read" issues
+    const rawBody = await request.text();
+    let body;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON payload" },
+        { status: 400, headers: corsHeaders() }
+      );
+    }
+
     if (!body.title || !body.contentText) {
       return NextResponse.json(
         { error: "Missing required fields: title and contentText." },
@@ -80,7 +87,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // ✅ FIXED: Insert into "saved_posts" (not "saves")
+    // Insert into database
     const { rows } = await pool.query(
       `INSERT INTO saved_posts (user_id, title, author, content, url, tag, type)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -113,6 +120,7 @@ export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      // Return empty array if not authenticated
       return NextResponse.json([], { status: 200, headers: corsHeaders() });
     }
 
@@ -123,7 +131,7 @@ export async function GET(request: Request) {
       return NextResponse.json([], { status: 200, headers: corsHeaders() });
     }
 
-    // ✅ FIXED: Select from "saved_posts" (not "saves")
+    // Query only this user's saves
     const { rows } = await pool.query(
       `SELECT id, title, author, content, url, tag, type, created_at
        FROM saved_posts
