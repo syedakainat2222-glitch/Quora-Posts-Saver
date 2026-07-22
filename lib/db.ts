@@ -1,14 +1,23 @@
 import { Pool } from "pg";
 
-// Global pool instance to avoid connection limits in serverless environments
-const globalForPool = globalThis as unknown as { pgPool?: Pool };
+console.log("POSTGRES_URL =", process.env.POSTGRES_URL);
+console.log("DATABASE_URL =", process.env.DATABASE_URL);
+
+const globalForPool = globalThis as unknown as {
+  pgPool?: Pool;
+};
 
 export const pool =
   globalForPool.pgPool ??
   new Pool({
-    connectionString: process.env.POSTGRES_URL,
-    max: 3, // Maximum connections in the pool
-    ssl: { rejectUnauthorized: false }, // Required for Supabase / Neon
+    connectionString:
+      process.env.POSTGRES_URL || process.env.DATABASE_URL,
+
+    ssl: {
+      rejectUnauthorized: false,
+    },
+
+    max: 3,
   });
 
 if (process.env.NODE_ENV !== "production") {
