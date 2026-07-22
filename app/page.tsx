@@ -131,16 +131,22 @@ export default function Page() {
 
   if (isAuthenticated === null || isAuthenticated === false || isLoading) {
     return (
-      <main className="flex h-dvh items-center justify-center overflow-hidden text-muted-foreground bg-background font-medium tracking-wide">
-        Verifying secure cloud access session credentials…
+      <main className="flex h-dvh items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <div className="size-10 animate-spin rounded-full border-4 border-blue-500/30 border-t-blue-500"></div>
+          <p className="text-sm font-medium">Verifying your session…</p>
+        </div>
       </main>
     )
   }
 
   if (error) {
     return (
-      <main className="flex h-dvh items-center justify-center overflow-hidden text-muted-foreground bg-background">
-        Could not reach the cloud archive. Please try again.
+      <main className="flex h-dvh items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900">
+        <div className="rounded-2xl border border-red-200/50 bg-red-50/80 p-8 text-center backdrop-blur-sm dark:border-red-900/30 dark:bg-red-950/20">
+          <p className="text-lg font-semibold text-red-700 dark:text-red-300">⚠️ Connection error</p>
+          <p className="mt-2 text-sm text-muted-foreground">Could not reach the cloud archive. Please try again later.</p>
+        </div>
       </main>
     )
   }
@@ -152,120 +158,166 @@ export default function Page() {
   }
 
   return (
-    <main className="flex h-dvh overflow-hidden w-full bg-background text-foreground">
+    <main className="flex h-dvh w-full overflow-hidden bg-gradient-to-br from-slate-50/50 to-blue-50/30 dark:from-slate-950 dark:to-slate-900">
       <Sidebar 
         currentTab={currentTab} 
         onTabChange={handleTabChange}
         displayName={userDisplayName}
       />
 
-      {/* ALL SAVES TAB */}
-      {currentTab === "All Saves" && (
-        <>
-          {displayedSaves.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-              <p className="text-lg font-semibold text-foreground">
-                {selectedTag ? `No items in ${selectedTag}` : "No saved posts yet"}
-              </p>
-              <p className="max-w-sm text-sm text-muted-foreground text-pretty">
-                {selectedTag 
-                  ? "You haven't added any clips under this specific collection category filter yet."
-                  : "Save a Quora post or reply from the browser extension and it will appear here automatically."}
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-1 overflow-hidden">
-              <FeedList
-                items={displayedSaves}
-                selectedId={selected ? selected.id : ""}
-                onSelect={setSelectedId}
-              />
-              {selected ? <ReadingView item={selected} /> : null}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* FOLDERS/TAGS TAB */}
-      {currentTab === "Folders/Tags" && (
-        <div className="flex-1 p-10 overflow-y-auto bg-card border-l border-border">
-          <h1 className="text-2xl font-bold text-foreground mb-2">📁 Folders / Tags Archive</h1>
-          <p className="text-sm text-muted-foreground mb-8">Manage your curated tags or click a collection folder in the sidebar panel to slice your workspace.</p>
-          <div className="p-8 border border-dashed border-border rounded-xl text-center max-w-xl text-muted-foreground text-sm">
-            Tag organization controls and automated folder sorting structures will load in version 1.3 updates. Use the sidebar to filter clips.
-          </div>
-        </div>
-      )}
-
-      {/* CONNECTED BLOGS TAB */}
-      {currentTab === "Connected Blogs" && (
-        <div className="flex-1 p-10 overflow-y-auto bg-card border-l border-border">
-          <h1 className="text-2xl font-bold text-foreground mb-2">🔗 Connected Blogging Sync</h1>
-          <p className="text-sm text-muted-foreground mb-8">Link external distribution systems to automatically format and broadcast text drafts directly from your feed canvas.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl">
-            <div className="p-5 border border-border rounded-xl bg-background/50 flex justify-between items-center">
-              <div>
-                <h4 className="font-semibold text-sm text-foreground">WordPress Core</h4>
-                <p className="text-xs text-muted-foreground">Sync drafts to self-hosted instances</p>
+      <div className="flex-1 overflow-hidden bg-white/50 backdrop-blur-sm dark:bg-zinc-900/50">
+        {/* ALL SAVES TAB */}
+        {currentTab === "All Saves" && (
+          <>
+            {displayedSaves.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+                <div className="rounded-full bg-blue-100/50 p-4 dark:bg-blue-900/20">
+                  <HardDrive className="size-10 text-blue-500 dark:text-blue-400" />
+                </div>
+                <p className="text-2xl font-bold text-foreground">
+                  {selectedTag ? `No items in “${selectedTag}”` : "Your library is empty"}
+                </p>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  {selectedTag 
+                    ? "You haven't added any clips under this tag yet."
+                    : "Save a Quora post or reply from the browser extension and it will appear here instantly."}
+                </p>
+                {!selectedTag && (
+                  <div className="mt-2 rounded-full bg-blue-50 px-4 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                    💡 Install the Q‑Saver extension to start saving
+                  </div>
+                )}
               </div>
-              <button className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">Link Profile</button>
-            </div>
-            <div className="p-5 border border-border rounded-xl bg-background/50 flex justify-between items-center">
-              <div>
-                <h4 className="font-semibold text-sm text-foreground">Medium Stories</h4>
-                <p className="text-xs text-muted-foreground">Push clips straight into feed layouts</p>
-              </div>
-              <button className="px-3 py-1.5 bg-zinc-800 text-white dark:bg-zinc-200 dark:text-black rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">Link Profile</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SETTINGS TAB */}
-      {currentTab === "Settings" && (
-        <div className="flex-1 p-10 overflow-y-auto bg-card border-l border-border space-y-8">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground mb-2">⚙️ Application Settings</h1>
-            <p className="text-sm text-muted-foreground">Verify account profiles, metadata indexes, and backend infrastructure state handles.</p>
-          </div>
-
-          {/* EDIT PROFILE COMPONENT CARD */}
-          <div className="max-w-md border border-border rounded-xl p-6 bg-background space-y-4">
-            <h3 className="text-sm font-bold text-foreground">👤 Edit User Profile Workspace</h3>
-            <form onSubmit={handleUpdateProfileName} className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">Display Full Name</label>
-                <input 
-                  type="text" 
-                  value={inputName}
-                  onChange={(e) => setInputName(e.target.value)}
-                  placeholder="Enter your name"
-                  className="w-full text-sm rounded-lg border border-border p-2 bg-transparent focus:border-primary outline-none"
+            ) : (
+              <div className="flex h-full overflow-hidden">
+                <FeedList
+                  items={displayedSaves}
+                  selectedId={selected ? selected.id : ""}
+                  onSelect={setSelectedId}
                 />
+                {selected ? <ReadingView item={selected} /> : null}
               </div>
-              <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-semibold text-xs rounded-lg hover:bg-blue-700 cursor-pointer">
-                Save Display Name
-              </button>
-            </form>
-          </div>
+            )}
+          </>
+        )}
 
-          {/* SYNC STATUS */}
-          <div className="max-w-md divide-y divide-border border-t border-b border-border py-2">
-            <div className="flex justify-between text-sm py-2">
-              <span className="text-muted-foreground">Cloud Sync Engine</span>
-              <span className="text-green-600 font-medium">● Active</span>
-            </div>
-            <div className="flex justify-between text-sm py-2">
-              <span className="text-muted-foreground">Neon Postgres</span>
-              <span className="text-green-600 font-medium">● Connected</span>
-            </div>
-            <div className="flex justify-between text-sm py-2">
-              <span className="text-muted-foreground">Extension Integration Channel</span>
-              <span className="text-blue-600 font-medium">Enabled (v1.2)</span>
+        {/* FOLDERS/TAGS TAB */}
+        {currentTab === "Folders/Tags" && (
+          <div className="flex-1 overflow-y-auto p-8">
+            <div className="max-w-4xl space-y-6">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">📁 Folders & Tags</h1>
+                <p className="mt-1 text-sm text-muted-foreground">Organise your saved content by tags – click any folder in the sidebar to filter.</p>
+              </div>
+              <div className="rounded-2xl border border-dashed border-blue-200/50 bg-blue-50/30 p-12 text-center dark:border-blue-800/30 dark:bg-blue-900/10">
+                <p className="text-sm text-muted-foreground">
+                  Tag management and automated sorting will arrive in version 1.3.
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground/70">
+                  For now, use the sidebar to browse by tag.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* CONNECTED BLOGS TAB */}
+        {currentTab === "Connected Blogs" && (
+          <div className="flex-1 overflow-y-auto p-8">
+            <div className="max-w-4xl space-y-6">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">🔗 Connected Blogs</h1>
+                <p className="mt-1 text-sm text-muted-foreground">Link external platforms to publish your saved content seamlessly.</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="group rounded-2xl border border-gray-200/70 bg-white/70 p-6 shadow-sm transition hover:shadow-md dark:border-zinc-700/50 dark:bg-zinc-800/50">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-semibold text-foreground">WordPress</h4>
+                      <p className="text-sm text-muted-foreground">Sync drafts to self‑hosted or .com sites</p>
+                    </div>
+                    <button className="rounded-full bg-blue-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700">
+                      Connect
+                    </button>
+                  </div>
+                </div>
+                <div className="group rounded-2xl border border-gray-200/70 bg-white/70 p-6 shadow-sm transition hover:shadow-md dark:border-zinc-700/50 dark:bg-zinc-800/50">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-semibold text-foreground">Medium</h4>
+                      <p className="text-sm text-muted-foreground">Push stories directly to your profile</p>
+                    </div>
+                    <button className="rounded-full bg-zinc-800 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-700 dark:bg-zinc-200 dark:text-zinc-900 dark:hover:bg-zinc-300">
+                      Connect
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground/70">More integrations coming soon.</p>
+            </div>
+          </div>
+        )}
+
+        {/* SETTINGS TAB */}
+        {currentTab === "Settings" && (
+          <div className="flex-1 overflow-y-auto p-8">
+            <div className="max-w-3xl space-y-8">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">⚙️ Settings</h1>
+                <p className="mt-1 text-sm text-muted-foreground">Manage your profile and check system status.</p>
+              </div>
+
+              {/* Profile card */}
+              <div className="rounded-2xl border border-gray-200/70 bg-white/70 p-6 shadow-sm dark:border-zinc-700/50 dark:bg-zinc-800/50">
+                <h3 className="text-lg font-semibold text-foreground">👤 Profile</h3>
+                <form onSubmit={handleUpdateProfileName} className="mt-4 space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Display name</label>
+                    <input
+                      type="text"
+                      value={inputName}
+                      onChange={(e) => setInputName(e.target.value)}
+                      placeholder="Enter your name"
+                      className="mt-1 w-full rounded-xl border border-gray-200 bg-white/50 px-4 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-white"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                  >
+                    Update name
+                  </button>
+                </form>
+              </div>
+
+              {/* System status */}
+              <div className="rounded-2xl border border-gray-200/70 bg-white/70 p-6 shadow-sm dark:border-zinc-700/50 dark:bg-zinc-800/50">
+                <h3 className="text-lg font-semibold text-foreground">🔌 System status</h3>
+                <div className="mt-3 divide-y divide-gray-200/50 dark:divide-zinc-700/50">
+                  <div className="flex justify-between py-2.5 text-sm">
+                    <span className="text-muted-foreground">Cloud sync</span>
+                    <span className="flex items-center gap-1.5 font-medium text-green-600 dark:text-green-400">
+                      <span className="size-2 rounded-full bg-green-500"></span> Active
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-2.5 text-sm">
+                    <span className="text-muted-foreground">Database</span>
+                    <span className="flex items-center gap-1.5 font-medium text-green-600 dark:text-green-400">
+                      <span className="size-2 rounded-full bg-green-500"></span> Connected
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-2.5 text-sm">
+                    <span className="text-muted-foreground">Extension channel</span>
+                    <span className="flex items-center gap-1.5 font-medium text-blue-600 dark:text-blue-400">
+                      <span className="size-2 rounded-full bg-blue-500"></span> v1.2
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </main>
   )
 }
