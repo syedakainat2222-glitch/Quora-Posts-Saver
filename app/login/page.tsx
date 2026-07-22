@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation"
 import { HardDrive, KeyRound, Mail, ArrowRight } from "lucide-react"
 
 // Pull keys out of your secure environmental config variables automatically
-const SUPABASE_URL = "https://vmqhryhksppasbhwxtjc.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZtcWhyeWhrc3BwYXNiaHd4dGpjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NjY1MTYsImV4cCI6MjEwMDE0MjUxNn0.z2tfpX97wYEF9b96t78WF28ZcybKM6J-7DLgEf1EZns";
+const SUPABASE_URL = "https://oiwjjpsdtxkagyuhrzfw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pd2pqcHNkdHhrYWd5dWhyemZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2OTU0NzgsImV4cCI6MjEwMDI3MTQ3OH0.DhfPMIGJhNE7BH7-ygKtF77rKgtcKFp0f4xHnBCCCRw
+";
 
 export default function LoginPage() {
   const router = useRouter()
