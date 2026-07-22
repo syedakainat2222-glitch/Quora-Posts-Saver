@@ -1,12 +1,22 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
-import useSWR from "swr"
+import useSWR, { useSWRConfig } from "swr"
 import { Sidebar } from "@/components/sidebar"
 import { FeedList } from "@/components/feed-list"
 import { ReadingView } from "@/components/reading-view"
+import { ToastContainer } from "@/components/toast-container"
+import { EditPostModal } from "@/components/modals/EditPostModal"
+import { DeleteConfirmModal } from "@/components/modals/DeleteConfirmModal"
+import { BulkActionModal } from "@/components/modals/BulkActionModal"
+import { TagManager } from "@/components/tag-manager"
+import { useToast } from "@/lib/use-toast"
+import { useDeletePost, useDuplicatePost, useBulkDelete, useBulkTagUpdate } from "@/lib/api-mutations"
+import { exportToCSV, exportToJSON } from "@/lib/export"
 import type { SaveItem, SaveKind } from "@/lib/saves"
+import { SortOption } from "@/components/sort-dropdown"
+import { Edit2, Trash2, Copy, Share2 } from "lucide-react"
 
 type ApiRow = {
   id: number | string
@@ -52,272 +62,352 @@ function normalize(row: ApiRow): SaveItem {
       day: "numeric",
     }),
     relative: relativeTime(row.created_at),
-    tag: folderNameNormalization(row.tag),
+    tag: row.tag || "General",
     sourceUrl: row.url || "",
     snippet: content.slice(0, 160) + (content.length > 160 ? "…" : ""),
     body: paragraphs.length ? paragraphs : [content],
+    createdAt: row.created_at
   }
 }
 
-function folderNameNormalization(tag: string): string {
-  if (!tag) return "General"
-  return tag.charAt(0).toUpperCase() + tag.slice(1).toLowerCase()
-}
-
-// ✅ FIXED: fetcher now sends the Authorization header with the token
 const fetcher = (url: string) => {
   const token = localStorage.getItem("qsaver_session_token")
   return fetch(url, {
-    headers: {
-      Authorization: token ? `Bearer ${token}` : "",
-    },
+    headers: { Authorization: token ? `Bearer ${token}` : "" },
   }).then((r) => r.json())
 }
 
 export default function Page() {
   const router = useRouter()
+  const { mutate: globalMutate } = useSWRConfig()
+  const toast = useToast()
   
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [currentTab, setCurrentTab] = useState<string>("All Saves")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
 
-  // ----- DYNAMIC PROFILE INITIALIZATION STATE -----
+  // Profile
   const [userDisplayName, setUserDisplayName] = useState<string>("New User")
   const [inputName, setInputName] = useState<string>("")
 
+  // Search & Sort
+  const [searchQuery, setSearchQuery] = useState("")
+  const [sortOption, setSortOption] = useState<SortOption>("newest")
+
+  // Bulk Selection
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, id: string } | null>(null)
+
+  // Modals
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false)
+  const [isBulkTagModalOpen, setIsBulkTagModalOpen] = useState(false)
+  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false)
+
+  // Soft Delete Pending State
+  const [pendingDeletions, setPendingDeletions] = useState<string[]>([])
+  const timeouts = useRef<Record<string, NodeJS.Timeout>>({})
+
   useEffect(() => {
     const localToken = localStorage.getItem("qsaver_session_token")
-    const cookieToken = document.cookie.split("; ").find(row => row.startsWith("session_token="))
-
-    if (!localToken && !cookieToken) {
+    if (!localToken) {
       setIsAuthenticated(false)
       router.push("/login")
     } else {
       setIsAuthenticated(true)
-      
-      // Load saved display name from local preference context or fallback to profile data elements
       const savedName = localStorage.getItem("qsaver_display_name")
       if (savedName) {
         setUserDisplayName(savedName)
         setInputName(savedName)
-      } else {
-        setInputName("New User")
       }
+    }
+    return () => {
+      Object.values(timeouts.current).forEach(clearTimeout)
     }
   }, [router])
 
-  const { data, error, isLoading } = useSWR<ApiRow[]>(
+  const { data, error, isLoading, mutate } = useSWR<ApiRow[]>(
     isAuthenticated ? "/api/save" : null,
     fetcher, 
     { refreshInterval: 5000 }
   )
 
-  const saves: SaveItem[] = Array.isArray(data) ? data.map(normalize) : []
-  const displayedSaves = selectedTag 
-    ? saves.filter(s => s.tag.toLowerCase() === selectedTag.toLowerCase())
-    : saves
+  const { trigger: deletePost } = useDeletePost()
+  const { trigger: duplicatePost } = useDuplicatePost()
+  const { trigger: bulkDelete, isMutating: isBulkDeleting } = useBulkDelete()
+  const { trigger: bulkTag, isMutating: isBulkTagging } = useBulkTagUpdate()
 
-  const selected = displayedSaves.find((s) => s.id === selectedId) ?? displayedSaves[0] ?? null
-
-  const handleUpdateProfileName = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!inputName.trim()) return
+  const processedSaves = useMemo(() => {
+    if (!data || !Array.isArray(data)) return []
     
-    setUserDisplayName(inputName.trim())
-    localStorage.setItem("qsaver_display_name", inputName.trim())
-    alert("✨ Profile updated successfully!")
+    let items = data
+      .filter(row => !pendingDeletions.includes(String(row.id)))
+      .map(normalize)
+
+    if (selectedTag) {
+      items = items.filter(s => s.tag.toLowerCase() === selectedTag.toLowerCase())
+    }
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      items = items.filter(s => 
+        s.title.toLowerCase().includes(q) || 
+        s.author.toLowerCase().includes(q) || 
+        s.body.join(" ").toLowerCase().includes(q)
+      )
+    }
+
+    return items.sort((a, b) => {
+      switch (sortOption) {
+        case "newest": return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        case "oldest": return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        case "title-asc": return a.title.localeCompare(b.title)
+        case "title-desc": return b.title.localeCompare(a.title)
+        case "author": return a.author.localeCompare(b.author)
+        default: return 0
+      }
+    })
+  }, [data, selectedTag, searchQuery, sortOption, pendingDeletions])
+
+  const selectedPost = processedSaves.find(s => s.id === selectedId) || null
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.key === "Delete" && selectedId) setIsDeleteModalOpen(true)
+      if ((e.ctrlKey || e.metaKey) && e.key === "e" && selectedId) {
+        e.preventDefault()
+        setIsEditModalOpen(true)
+      }
+    }
+    const handleClickOutside = () => setContextMenu(null)
+    window.addEventListener("keydown", handleKeyDown)
+    window.addEventListener("click", handleClickOutside)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+      window.removeEventListener("click", handleClickOutside)
+    }
+  }, [selectedId])
+
+  const handleDuplicate = async (postId?: string) => {
+    const post = postId ? processedSaves.find(s => s.id === postId) : selectedPost
+    if (!post) return
+    try {
+      await duplicatePost({
+        title: `${post.title} (Copy)`,
+        author: post.author,
+        contentText: post.body.join("\n\n"),
+        tag: post.tag,
+        type: post.kind,
+        url: post.sourceUrl
+      })
+      mutate()
+      toast.success("Post duplicated!")
+    } catch (err) {
+      toast.error("Failed to duplicate post")
+    }
   }
 
-  if (isAuthenticated === null || isAuthenticated === false || isLoading) {
+  const handleDelete = async (postId?: string) => {
+    const idToDelete = postId || selectedId
+    if (!idToDelete) return
+    
+    setIsDeleteModalOpen(false)
+    if (selectedId === idToDelete) setSelectedId(null)
+
+    setPendingDeletions(prev => [...prev, idToDelete])
+
+    const timer = setTimeout(async () => {
+      try {
+        await deletePost({ id: idToDelete })
+        mutate()
+        globalMutate("/api/save/tags")
+        setPendingDeletions(prev => prev.filter(id => id !== idToDelete))
+        delete timeouts.current[idToDelete]
+      } catch (err) {
+        toast.error("Failed to delete post")
+        setPendingDeletions(prev => prev.filter(id => id !== idToDelete))
+      }
+    }, 5000)
+
+    timeouts.current[idToDelete] = timer
+
+    toast.info("Post moved to trash", {
+      label: "Undo",
+      onClick: () => {
+        clearTimeout(timeouts.current[idToDelete])
+        delete timeouts.current[idToDelete]
+        setPendingDeletions(prev => prev.filter(id => id !== idToDelete))
+        setSelectedId(idToDelete)
+        toast.success("Deletion cancelled")
+      }
+    })
+  }
+
+  const handleBulkDelete = async () => {
+    try {
+      await bulkDelete({ ids: selectedIds })
+      mutate()
+      globalMutate("/api/save/tags")
+      toast.success(`Deleted ${selectedIds.length} items`)
+      setSelectedIds([])
+      setIsBulkDeleteModalOpen(false)
+    } catch (err) {
+      toast.error("Bulk delete failed")
+    }
+  }
+
+  const handleBulkTag = async (tag: string) => {
+    try {
+      await bulkTag({ ids: selectedIds, tag })
+      mutate()
+      globalMutate("/api/save/tags")
+      toast.success(`Updated tags for ${selectedIds.length} items`)
+      setSelectedIds([])
+      setIsBulkTagModalOpen(false)
+    } catch (err) {
+      toast.error("Failed to update tags")
+    }
+  }
+
+  const handleCopyMarkdown = (postId?: string) => {
+    const post = postId ? processedSaves.find(s => s.id === postId) : selectedPost
+    if (!post) return
+    const md = `# ${post.title}\nBy ${post.author}\n\n${post.body.join("\n\n")}`
+    navigator.clipboard.writeText(md)
+    toast.success("Markdown copied to clipboard!")
+  }
+
+  const handleShare = (postId?: string) => {
+    const post = postId ? processedSaves.find(s => s.id === postId) : selectedPost
+    if (!post?.sourceUrl) return
+    navigator.clipboard.writeText(post.sourceUrl)
+    toast.success("Source link copied!")
+  }
+
+  const handleContextMenu = (e: React.MouseEvent, id: string) => {
+    e.preventDefault()
+    setContextMenu({ x: e.clientX, y: e.clientY, id })
+  }
+
+  if (isAuthenticated === null || isLoading) {
     return (
-      <main className="flex h-dvh items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <div className="size-10 animate-spin rounded-full border-4 border-blue-500/30 border-t-blue-500"></div>
-          <p className="text-sm font-medium">Verifying your session…</p>
+      <main className="flex h-dvh items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-10 animate-spin rounded-full border-4 border-blue-500/30 border-t-blue-600"></div>
+          <p className="text-sm font-bold text-muted-foreground animate-pulse uppercase tracking-widest">Initialising Library...</p>
         </div>
       </main>
     )
-  }
-
-  if (error) {
-    return (
-      <main className="flex h-dvh items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900">
-        <div className="rounded-2xl border border-red-200/50 bg-red-50/80 p-8 text-center backdrop-blur-sm dark:border-red-900/30 dark:bg-red-950/20">
-          <p className="text-lg font-semibold text-red-700 dark:text-red-300">⚠️ Connection error</p>
-          <p className="mt-2 text-sm text-muted-foreground">Could not reach the cloud archive. Please try again later.</p>
-        </div>
-      </main>
-    )
-  }
-
-  const handleTabChange = (tabName: string, tagName: string | null = null) => {
-    setCurrentTab(tabName)
-    setSelectedTag(tagName)
-    setSelectedId(null)
   }
 
   return (
-    <main className="flex h-dvh w-full overflow-hidden bg-gradient-to-br from-slate-50/50 to-blue-50/30 dark:from-slate-950 dark:to-slate-900">
+    <main className="flex h-dvh w-full overflow-hidden bg-slate-50 dark:bg-zinc-950">
       <Sidebar 
         currentTab={currentTab} 
-        onTabChange={handleTabChange}
+        onTabChange={(tab, tag) => {
+          setCurrentTab(tab)
+          setSelectedTag(tag)
+          setSelectedId(null)
+          setSelectedIds([])
+        }}
+        selectedTag={selectedTag}
         displayName={userDisplayName}
+        onOpenTagManager={() => setIsTagManagerOpen(true)}
       />
 
-      <div className="flex-1 overflow-hidden bg-white/50 backdrop-blur-sm dark:bg-zinc-900/50">
-        {/* ALL SAVES TAB */}
-        {currentTab === "All Saves" && (
+      <div className="flex-1 flex overflow-hidden relative">
+        {currentTab === "All Saves" ? (
           <>
-            {displayedSaves.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-                <div className="rounded-full bg-blue-100/50 p-4 dark:bg-blue-900/20">
-                  <HardDrive className="size-10 text-blue-500 dark:text-blue-400" />
-                </div>
-                <p className="text-2xl font-bold text-foreground">
-                  {selectedTag ? `No items in “${selectedTag}”` : "Your library is empty"}
-                </p>
-                <p className="max-w-md text-sm text-muted-foreground">
-                  {selectedTag 
-                    ? "You haven't added any clips under this tag yet."
-                    : "Save a Quora post or reply from the browser extension and it will appear here instantly."}
-                </p>
-                {!selectedTag && (
-                  <div className="mt-2 rounded-full bg-blue-50 px-4 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                    💡 Install the Q‑Saver extension to start saving
-                  </div>
-                )}
-              </div>
+            <FeedList
+              items={processedSaves}
+              selectedId={selectedId || ""}
+              onSelect={setSelectedId}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              sortOption={sortOption}
+              onSortChange={setSortOption}
+              selectedIds={selectedIds}
+              onToggleSelect={(id) => setSelectedIds(prev => 
+                prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+              )}
+              onSelectAll={() => setSelectedIds(
+                selectedIds.length === processedSaves.length ? [] : processedSaves.map(s => s.id)
+              )}
+              onBulkDelete={() => setIsBulkDeleteModalOpen(true)}
+              onBulkTag={() => setIsBulkTagModalOpen(true)}
+              onContextMenu={handleContextMenu}
+            />
+            {selectedPost ? (
+              <ReadingView 
+                item={selectedPost} 
+                onEdit={() => setIsEditModalOpen(true)}
+                onDelete={() => setIsDeleteModalOpen(true)}
+                onDuplicate={() => handleDuplicate()}
+                onCopyMarkdown={() => handleCopyMarkdown()}
+                onShare={() => handleShare()}
+              />
             ) : (
-              <div className="flex h-full overflow-hidden">
-                <FeedList
-                  items={displayedSaves}
-                  selectedId={selected ? selected.id : ""}
-                  onSelect={setSelectedId}
-                />
-                {selected ? <ReadingView item={selected} /> : null}
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-10 bg-white/30 dark:bg-zinc-900/10 backdrop-blur-sm">
+                <div className="size-16 rounded-3xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mb-6">
+                  <Layers className="size-8 text-blue-500" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground">Nothing Selected</h3>
+                <p className="text-sm text-muted-foreground mt-2 max-w-xs">
+                  Pick a post from the list to view its contents, edit details, or export to your blog.
+                </p>
               </div>
             )}
           </>
-        )}
-
-        {/* FOLDERS/TAGS TAB */}
-        {currentTab === "Folders/Tags" && (
-          <div className="flex-1 overflow-y-auto p-8">
-            <div className="max-w-4xl space-y-6">
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight text-foreground">📁 Folders & Tags</h1>
-                <p className="mt-1 text-sm text-muted-foreground">Organise your saved content by tags – click any folder in the sidebar to filter.</p>
-              </div>
-              <div className="rounded-2xl border border-dashed border-blue-200/50 bg-blue-50/30 p-12 text-center dark:border-blue-800/30 dark:bg-blue-900/10">
-                <p className="text-sm text-muted-foreground">
-                  Tag management and automated sorting will arrive in version 1.3.
-                </p>
-                <p className="mt-2 text-xs text-muted-foreground/70">
-                  For now, use the sidebar to browse by tag.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* CONNECTED BLOGS TAB */}
-        {currentTab === "Connected Blogs" && (
-          <div className="flex-1 overflow-y-auto p-8">
-            <div className="max-w-4xl space-y-6">
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight text-foreground">🔗 Connected Blogs</h1>
-                <p className="mt-1 text-sm text-muted-foreground">Link external platforms to publish your saved content seamlessly.</p>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="group rounded-2xl border border-gray-200/70 bg-white/70 p-6 shadow-sm transition hover:shadow-md dark:border-zinc-700/50 dark:bg-zinc-800/50">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="font-semibold text-foreground">WordPress</h4>
-                      <p className="text-sm text-muted-foreground">Sync drafts to self‑hosted or .com sites</p>
+        ) : currentTab === "Settings" ? (
+            <div className="flex-1 p-10 overflow-y-auto">
+                <div className="max-w-3xl mx-auto">
+                    <h1 className="text-4xl font-black mb-2 uppercase tracking-tighter">Settings</h1>
+                    <p className="text-muted-foreground mb-10">Manage your library preferences and system data.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="p-8 bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-xl shadow-gray-200/20 dark:shadow-none">
+                            <div className="size-12 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mb-6"><FileDown className="size-6 text-blue-600" /></div>
+                            <h2 className="text-xl font-bold mb-3">Export Data</h2>
+                            <p className="text-sm text-muted-foreground mb-8 leading-relaxed">Download your curated library in CSV or JSON format for backups or external analysis.</p>
+                            <div className="flex flex-col gap-3">
+                                <button onClick={() => exportToCSV(processedSaves)} className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-700 transition active:scale-95 shadow-lg shadow-blue-500/25">Download CSV</button>
+                                <button onClick={() => exportToJSON(processedSaves)} className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gray-100 dark:bg-zinc-800 text-foreground rounded-2xl font-bold text-sm hover:bg-gray-200 dark:hover:bg-zinc-700 transition active:scale-95">Download JSON</button>
+                            </div>
+                        </div>
                     </div>
-                    <button className="rounded-full bg-blue-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700">
-                      Connect
-                    </button>
-                  </div>
                 </div>
-                <div className="group rounded-2xl border border-gray-200/70 bg-white/70 p-6 shadow-sm transition hover:shadow-md dark:border-zinc-700/50 dark:bg-zinc-800/50">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="font-semibold text-foreground">Medium</h4>
-                      <p className="text-sm text-muted-foreground">Push stories directly to your profile</p>
-                    </div>
-                    <button className="rounded-full bg-zinc-800 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-700 dark:bg-zinc-200 dark:text-zinc-900 dark:hover:bg-zinc-300">
-                      Connect
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground/70">More integrations coming soon.</p>
             </div>
-          </div>
-        )}
+        ) : null}
 
-        {/* SETTINGS TAB */}
-        {currentTab === "Settings" && (
-          <div className="flex-1 overflow-y-auto p-8">
-            <div className="max-w-3xl space-y-8">
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight text-foreground">⚙️ Settings</h1>
-                <p className="mt-1 text-sm text-muted-foreground">Manage your profile and check system status.</p>
-              </div>
-
-              {/* Profile card */}
-              <div className="rounded-2xl border border-gray-200/70 bg-white/70 p-6 shadow-sm dark:border-zinc-700/50 dark:bg-zinc-800/50">
-                <h3 className="text-lg font-semibold text-foreground">👤 Profile</h3>
-                <form onSubmit={handleUpdateProfileName} className="mt-4 space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Display name</label>
-                    <input
-                      type="text"
-                      value={inputName}
-                      onChange={(e) => setInputName(e.target.value)}
-                      placeholder="Enter your name"
-                      className="mt-1 w-full rounded-xl border border-gray-200 bg-white/50 px-4 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-white"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-                  >
-                    Update name
-                  </button>
-                </form>
-              </div>
-
-              {/* System status */}
-              <div className="rounded-2xl border border-gray-200/70 bg-white/70 p-6 shadow-sm dark:border-zinc-700/50 dark:bg-zinc-800/50">
-                <h3 className="text-lg font-semibold text-foreground">🔌 System status</h3>
-                <div className="mt-3 divide-y divide-gray-200/50 dark:divide-zinc-700/50">
-                  <div className="flex justify-between py-2.5 text-sm">
-                    <span className="text-muted-foreground">Cloud sync</span>
-                    <span className="flex items-center gap-1.5 font-medium text-green-600 dark:text-green-400">
-                      <span className="size-2 rounded-full bg-green-500"></span> Active
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-2.5 text-sm">
-                    <span className="text-muted-foreground">Database</span>
-                    <span className="flex items-center gap-1.5 font-medium text-green-600 dark:text-green-400">
-                      <span className="size-2 rounded-full bg-green-500"></span> Connected
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-2.5 text-sm">
-                    <span className="text-muted-foreground">Extension channel</span>
-                    <span className="flex items-center gap-1.5 font-medium text-blue-600 dark:text-blue-400">
-                      <span className="size-2 rounded-full bg-blue-500"></span> v1.2
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+        {/* CONTEXT MENU (Commandment #17) */}
+        {contextMenu && (
+          <div 
+            className="fixed z-[100] w-48 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl shadow-2xl py-2 overflow-hidden animate-in fade-in zoom-in duration-150"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            <button onClick={() => { setSelectedId(contextMenu.id); setIsEditModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-zinc-800 transition text-left"><Edit2 className="size-4 text-blue-500" /> Edit Post</button>
+            <button onClick={() => handleDuplicate(contextMenu.id)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-zinc-800 transition text-left"><Copy className="size-4 text-indigo-500" /> Duplicate</button>
+            <button onClick={() => handleShare(contextMenu.id)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-zinc-800 transition text-left"><Share2 className="size-4 text-teal-500" /> Copy Link</button>
+            <div className="h-px bg-gray-100 dark:bg-zinc-800 my-1 mx-2" />
+            <button onClick={() => handleDelete(contextMenu.id)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 transition text-left"><Trash2 className="size-4" /> Delete Post</button>
           </div>
         )}
       </div>
+
+      <ToastContainer toasts={toast.toasts} />
+      {selectedPost && <EditPostModal open={isEditModalOpen} post={selectedPost} onClose={() => setIsEditModalOpen(false)} onSave={() => { mutate(); globalMutate("/api/save/tags"); toast.success("Changes saved!"); }} />}
+      <DeleteConfirmModal open={isDeleteModalOpen} title="Delete Post" message="Are you sure you want to delete this post? It will be permanently removed from your library after 5 seconds." onConfirm={handleDelete} onClose={() => setIsDeleteModalOpen(false)} isDeleting={false} />
+      <DeleteConfirmModal open={isBulkDeleteModalOpen} title={`Delete ${selectedIds.length} items`} message="You are about to delete multiple posts. This action is permanent and cannot be undone." onConfirm={handleBulkDelete} onClose={() => setIsBulkDeleteModalOpen(false)} isDeleting={isBulkDeleting} />
+      <BulkActionModal open={isBulkTagModalOpen} count={selectedIds.length} onClose={() => setIsBulkTagModalOpen(false)} onConfirm={handleBulkTag} isProcessing={isBulkTagging} />
+      <TagManager open={isTagManagerOpen} onClose={() => setIsTagManagerOpen(false)} />
     </main>
   )
 }
+
+function Layers(props: any) { return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.1 6.27a2 2 0 0 0 0 3.66l9.07 4.09a2 2 0 0 0 1.66 0l9.07-4.09a2 2 0 0 0 0-3.66z" /><path d="m2.1 14.07 9.07 4.09a2 2 0 0 0 1.66 0l9.07-4.09" /><path d="m2.1 19.07 9.07 4.09a2 2 0 0 0 1.66 0l9.07-4.09" /></svg> }
+function FileDown(props: any) { return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="3" y2="15" /></svg> }
+function Rocket(props: any) { return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.71-2.13.09-2.91a2.18 2.18 0 0 0-3.09-.09z" /><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" /><path d="M9 12H4s.55-3.03 2-4.5c1.62-1.63 5-2 5-2" /><path d="M12 15v5s3.03-.55 4.5-2c1.63-1.62 2-5 2-5" /></svg> }
