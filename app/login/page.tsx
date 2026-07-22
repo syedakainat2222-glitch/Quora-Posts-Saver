@@ -2,9 +2,9 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { HardDrive, KeyRound, Mail, ArrowRight } from "lucide-react"
+import { HardDrive, KeyRound, Mail, ArrowRight, Sparkles } from "lucide-react"
 
-// Pull keys out of your secure environmental config variables automatically
+// Supabase config
 const SUPABASE_URL = "https://oiwjjpsdtxkagyuhrzfw.supabase.co";
 const SUPABASE_ANON_KEY = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pd2pqcHNkdHhrYWd5dWhyemZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2OTU0NzgsImV4cCI6MjEwMDI3MTQ3OH0.DhfPMIGJhNE7BH7-ygKtF77rKgtcKFp0f4xHnBCCCRw`;
 
@@ -26,7 +26,6 @@ export default function LoginPage() {
         throw new Error("Password must be at least 6 characters long.")
       }
 
-      // Determine the correct Supabase REST endpoint path depending on toggle state
       const endpoint = isSignUp ? "signup" : "token?grant_type=password"
       const authUrl = `${SUPABASE_URL}/auth/v1/${endpoint}`
 
@@ -45,9 +44,7 @@ export default function LoginPage() {
         throw new Error(data.error_description || data.error || "Authentication procedure failed.")
       }
 
-      // If we are logging in, extract the access token session parameters and save it locally
       if (!isSignUp && data.access_token) {
-        // Securely drop the session token into browser local storage or cookies
         localStorage.setItem("qsaver_session_token", data.access_token)
         document.cookie = `session_token=${data.access_token}; path=/; max-age=604800; SameSite=Lax; Secure`
         
@@ -55,7 +52,7 @@ export default function LoginPage() {
         router.push("/")
       } else if (isSignUp) {
         alert("✅ Account created successfully! Please check your email inbox to confirm validation, then sign in.")
-        setIsSignUp(false) // Toggle back to login block view
+        setIsSignUp(false)
       }
 
     } catch (err: any) {
@@ -66,56 +63,67 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4 dark:bg-zinc-950">
-      <div className="w-full max-w-md space-y-6 rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="relative flex min-h-dvh items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 px-4 dark:from-slate-950 dark:to-slate-900">
+      {/* Subtle background decoration */}
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute -left-20 -top-20 size-96 rounded-full bg-blue-200/20 blur-3xl dark:bg-blue-500/10"></div>
+        <div className="absolute -bottom-20 -right-20 size-96 rounded-full bg-indigo-200/20 blur-3xl dark:bg-indigo-500/10"></div>
+      </div>
+
+      <div className="w-full max-w-md space-y-6 rounded-2xl border border-white/20 bg-white/80 p-8 shadow-2xl backdrop-blur-xl dark:border-zinc-800/50 dark:bg-zinc-900/80 dark:shadow-zinc-800/30">
         
-        {/* Branding Logo Block */}
-        <div className="flex flex-col items-center space-y-2 text-center">
-          <div className="flex size-12 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
-            <HardDrive className="size-6" />
+        {/* Branding */}
+        <div className="flex flex-col items-center space-y-3 text-center">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20">
+            <HardDrive className="size-7" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-            {isSignUp ? "Create your Q-Saver Account" : "Welcome back to Q-Saver"}
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+            {isSignUp ? "Create your account" : "Welcome back"}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            {isSignUp ? "Enter your details to start saving cross-device cloud clips" : "Log in to view your private database workspace feed"}
+          <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xs">
+            {isSignUp
+              ? "Start saving your favourite Quora insights – all in one place."
+              : "Sign in to access your private knowledge library."}
           </p>
         </div>
 
         {errorMsg && (
-          <div className="rounded-lg bg-red-50 p-3.5 text-xs font-medium text-red-600 dark:bg-red-950/30 dark:text-red-400">
-            ⚠️ {errorMsg}
+          <div className="rounded-xl bg-red-50/80 p-4 text-sm font-medium text-red-700 backdrop-blur-sm dark:bg-red-950/30 dark:text-red-300">
+            <span className="mr-2">⚠️</span> {errorMsg}
           </div>
         )}
 
-        {/* Input Interface Layout */}
-        <form onSubmit={handleAuthentication} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Email Address</label>
+        <form onSubmit={handleAuthentication} className="space-y-5">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Email Address
+            </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-3 size-4 text-gray-400" />
+              <Mail className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="email"
                 required
-                placeholder="name@domain.com"
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-transparent py-2.5 pl-10 pr-4 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 dark:border-zinc-800"
+                className="w-full rounded-xl border border-gray-200 bg-white/50 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-white"
               />
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Password</label>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Password
+            </label>
             <div className="relative">
-              <KeyRound className="absolute left-3 top-3 size-4 text-gray-400" />
+              <KeyRound className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="password"
                 required
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-transparent py-2.5 pl-10 pr-4 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 dark:border-zinc-800"
+                className="w-full rounded-xl border border-gray-200 bg-white/50 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-white"
               />
             </div>
           </div>
@@ -123,24 +131,37 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer mt-2"
+            className="group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:scale-[1.02] hover:shadow-blue-500/40 disabled:opacity-60 disabled:hover:scale-100"
           >
-            {loading ? "Processing..." : isSignUp ? "Sign Up" : "Sign In"}
-            {!loading && <ArrowRight className="size-4" />}
+            <span className="relative flex items-center justify-center gap-2">
+              {loading ? (
+                "Processing…"
+              ) : isSignUp ? (
+                <>
+                  Create account
+                  <Sparkles className="size-4" />
+                </>
+              ) : (
+                <>
+                  Sign in
+                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                </>
+              )}
+            </span>
           </button>
         </form>
 
-        {/* Form Toggle Link Area */}
-        <div className="text-center pt-2 border-t border-gray-100 dark:border-zinc-800">
+        <div className="text-center pt-2 border-t border-gray-200/50 dark:border-zinc-800/50">
           <button
             type="button"
             onClick={() => setIsSignUp(!isSignUp)}
-            className="text-xs font-medium text-blue-600 hover:underline bg-transparent border-none cursor-pointer"
+            className="text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 bg-transparent border-none cursor-pointer transition"
           >
-            {isSignUp ? "Already have a profile slot? Sign In" : "Don't have an account workspace? Sign Up"}
+            {isSignUp
+              ? "Already have an account? Sign in"
+              : "Don't have an account? Sign up"}
           </button>
         </div>
-
       </div>
     </div>
   )
