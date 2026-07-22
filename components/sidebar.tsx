@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import useSWR from "swr"
 import {
   HardDrive,
   Layers,
@@ -9,8 +10,9 @@ import {
   Settings,
   Hash,
   LogOut,
+  PlusCircle,
+  Settings2
 } from "lucide-react"
-import { folders } from "@/lib/saves"
 import { cn } from "@/lib/utils"
 
 const nav = [
@@ -26,6 +28,14 @@ interface SidebarProps {
   onTabChange: (tabName: string, tagName: string | null) => void
   selectedTag: string | null
   displayName: string
+  onOpenTagManager: () => void
+}
+
+const fetcher = (url: string) => {
+  const token = localStorage.getItem("qsaver_session_token")
+  return fetch(url, {
+    headers: { Authorization: token ? `Bearer ${token}` : "" },
+  }).then((r) => r.json())
 }
 
 export function Sidebar({
@@ -34,13 +44,20 @@ export function Sidebar({
   onTabChange,
   selectedTag,
   displayName,
+  onOpenTagManager
 }: SidebarProps) {
   const router = useRouter()
+
+  // Fetch dynamic tags with counts
+  const { data: tags } = useSWR<{ name: string; count: number }[]>(
+    "/api/save/tags",
+    fetcher,
+    { refreshInterval: 5000 }
+  )
 
   const handleLogOutAction = () => {
     localStorage.removeItem("qsaver_session_token")
     document.cookie = "session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure"
-    alert("🔒 Logged out of your session safely! Returning to authentication screen.")
     router.push("/login")
   }
 
@@ -77,7 +94,6 @@ export function Sidebar({
             <button
               key={item.name}
               onClick={() => onTabChange(item.name, null)}
-              aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all text-left border-none bg-transparent cursor-pointer",
                 isActive
@@ -98,12 +114,22 @@ export function Sidebar({
       </nav>
 
       {/* Tags */}
-      <div className="mt-6 px-3">
-        <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Folders / Tags
-        </p>
+      <div className="mt-6 px-3 flex-1 overflow-y-auto min-h-0">
+        <div className="flex items-center justify-between px-3 pb-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Folders / Tags
+          </p>
+          <button 
+            onClick={onOpenTagManager}
+            className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-md transition text-muted-foreground"
+            title="Manage Tags"
+          >
+            <Settings2 className="size-3" />
+          </button>
+        </div>
+        
         <div className="flex flex-col gap-0.5">
-          {folders.map((folder) => {
+          {tags?.map((folder) => {
             const isTagActive =
               currentTab === "All Saves" && selectedTag?.toLowerCase() === folder.name.toLowerCase()
             return (
@@ -111,17 +137,20 @@ export function Sidebar({
                 key={folder.name}
                 onClick={() => onTabChange("All Saves", folder.name)}
                 className={cn(
-                  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition-all text-left border-none bg-transparent cursor-pointer",
+                  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition-all text-left border-none bg-transparent cursor-pointer group",
                   isTagActive
                     ? "bg-blue-50/80 text-blue-700 shadow-sm dark:bg-blue-950/30 dark:text-blue-300"
                     : "text-gray-700 hover:bg-gray-100/60 dark:text-gray-300 dark:hover:bg-zinc-800/60",
                 )}
               >
                 <span className="flex items-center gap-2.5 truncate">
-                  <Hash className="size-3.5 text-muted-foreground shrink-0" />
+                  <Hash className={cn(
+                    "size-3.5 shrink-0 transition-colors",
+                    isTagActive ? "text-blue-500" : "text-muted-foreground group-hover:text-blue-400"
+                  )} />
                   <span className="truncate">{folder.name}</span>
                 </span>
-                <span className="rounded-full bg-gray-100/60 px-2 py-0.5 text-xs font-medium text-muted-foreground dark:bg-zinc-800/60">
+                <span className="rounded-full bg-gray-100/60 px-2 py-0.5 text-[10px] font-bold text-muted-foreground dark:bg-zinc-800/60">
                   {folder.count}
                 </span>
               </button>
@@ -129,8 +158,6 @@ export function Sidebar({
           })}
         </div>
       </div>
-
-      <div className="flex-1" />
 
       {/* Profile */}
       <div className="m-3 rounded-2xl border border-gray-200/60 bg-white/70 p-3 shadow-sm backdrop-blur-sm dark:border-zinc-800/60 dark:bg-zinc-900/70">
