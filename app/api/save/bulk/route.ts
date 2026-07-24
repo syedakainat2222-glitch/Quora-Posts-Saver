@@ -26,21 +26,27 @@ async function getUserIdFromToken(token: string): Promise<string | null> {
     const userData = await response.json();
     return userData.id || null;
   } catch (error) {
+    console.error("Auth error in bulk:", error);
     return null;
   }
 }
 
-// Bulk DELETE
 export async function DELETE(request: Request) {
   try {
     const authHeader = request.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders() });
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders() });
+    }
 
     const userId = await getUserIdFromToken(authHeader.split(" ")[1]);
-    if (!userId) return NextResponse.json({ error: "Invalid session" }, { status: 401, headers: corsHeaders() });
+    if (!userId) {
+      return NextResponse.json({ error: "Invalid session" }, { status: 401, headers: corsHeaders() });
+    }
 
     const { ids } = await request.json();
-    if (!Array.isArray(ids) || ids.length === 0) return NextResponse.json({ error: "No IDs provided" }, { status: 400, headers: corsHeaders() });
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: "No IDs provided" }, { status: 400, headers: corsHeaders() });
+    }
 
     await pool.query(
       "DELETE FROM saved_posts WHERE id = ANY($1) AND user_id = $2",
@@ -49,21 +55,27 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true }, { headers: corsHeaders() });
   } catch (error) {
+    console.error("Bulk DELETE error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500, headers: corsHeaders() });
   }
 }
 
-// Bulk PATCH (Update Tag)
 export async function PATCH(request: Request) {
   try {
     const authHeader = request.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders() });
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders() });
+    }
 
     const userId = await getUserIdFromToken(authHeader.split(" ")[1]);
-    if (!userId) return NextResponse.json({ error: "Invalid session" }, { status: 401, headers: corsHeaders() });
+    if (!userId) {
+      return NextResponse.json({ error: "Invalid session" }, { status: 401, headers: corsHeaders() });
+    }
 
     const { ids, tag } = await request.json();
-    if (!Array.isArray(ids) || ids.length === 0 || !tag) return NextResponse.json({ error: "Invalid data" }, { status: 400, headers: corsHeaders() });
+    if (!Array.isArray(ids) || ids.length === 0 || !tag) {
+      return NextResponse.json({ error: "Invalid data" }, { status: 400, headers: corsHeaders() });
+    }
 
     await pool.query(
       "UPDATE saved_posts SET tag = $1 WHERE id = ANY($2) AND user_id = $3",
@@ -72,6 +84,7 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ success: true }, { headers: corsHeaders() });
   } catch (error) {
+    console.error("Bulk PATCH error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500, headers: corsHeaders() });
   }
 }
