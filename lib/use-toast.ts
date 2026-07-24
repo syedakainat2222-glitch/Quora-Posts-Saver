@@ -1,5 +1,4 @@
 import { useState, useCallback } from "react"
-
 export type ToastType = "success" | "error" | "info"
 
 export interface Toast {
