@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
 import { X, Tag } from "lucide-react"
 
 interface BulkActionModalProps {
@@ -33,7 +32,10 @@ export function BulkActionModal({
             </div>
             <h2 className="text-xl font-bold text-foreground">Bulk Update Tag</h2>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-full transition">
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-full transition"
+          >
             <X className="size-5 text-muted-foreground" />
           </button>
         </div>
@@ -53,16 +55,20 @@ export function BulkActionModal({
         </div>
 
         <div className="flex justify-end gap-3 p-6 border-t dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-900/50">
-          <Button variant="outline" onClick={onClose} disabled={isProcessing}>
+          <button
+            onClick={onClose}
+            disabled={isProcessing}
+            className="px-4 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 text-sm font-medium text-foreground hover:bg-gray-100 dark:hover:bg-zinc-800 transition disabled:opacity-50"
+          >
             Cancel
-          </Button>
-          <Button 
-            onClick={() => onConfirm(newTag || "General")} 
+          </button>
+          <button
+            onClick={() => onConfirm(newTag || "General")}
             disabled={isProcessing || !newTag.trim()}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition disabled:opacity-50"
           >
             {isProcessing ? "Updating..." : "Update Tags"}
-          </Button>
+          </button>
         </div>
       </div>
     </div>
