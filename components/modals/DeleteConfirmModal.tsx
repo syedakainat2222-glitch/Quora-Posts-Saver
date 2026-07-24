@@ -1,6 +1,5 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
 import { X, AlertTriangle } from "lucide-react"
 
 interface DeleteConfirmModalProps {
@@ -32,7 +31,10 @@ export function DeleteConfirmModal({
             </div>
             <h2 className="text-xl font-bold text-foreground">{title}</h2>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-full transition">
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-full transition"
+          >
             <X className="size-5 text-muted-foreground" />
           </button>
         </div>
@@ -42,17 +44,20 @@ export function DeleteConfirmModal({
         </div>
 
         <div className="flex justify-end gap-3 p-6 border-t dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-900/50">
-          <Button variant="outline" onClick={onClose} disabled={isDeleting}>
-            Cancel
-          </Button>
-          <Button 
-            variant="destructive" 
-            onClick={onConfirm} 
+          <button
+            onClick={onClose}
             disabled={isDeleting}
-            className="bg-red-600 hover:bg-red-700 text-white"
+            className="px-4 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 text-sm font-medium text-foreground hover:bg-gray-100 dark:hover:bg-zinc-800 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isDeleting}
+            className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition disabled:opacity-50"
           >
             {isDeleting ? "Deleting..." : "Delete"}
-          </Button>
+          </button>
         </div>
       </div>
     </div>
