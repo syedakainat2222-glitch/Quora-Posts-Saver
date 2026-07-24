@@ -1,5 +1,4 @@
 "use client"
-
 import { useState } from "react"
 import useSWR, { useSWRConfig } from "swr"
 import { useRenameTag, useDeleteTag } from "@/lib/api-mutations"
