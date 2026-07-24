@@ -16,7 +16,7 @@ import { useDeletePost, useDuplicatePost, useBulkDelete, useBulkTagUpdate } from
 import { exportToCSV, exportToJSON } from "@/lib/export"
 import type { SaveItem, SaveKind } from "@/lib/saves"
 import { SortOption } from "@/components/sort-dropdown"
-import { Edit2, Trash2, Copy, Share2 } from "lucide-react"
+import { Edit2, Trash2, Copy, Share2, Layers, FileDown } from "lucide-react"
 
 type ApiRow = {
   id: number | string
@@ -66,22 +66,69 @@ function normalize(row: ApiRow): SaveItem {
     sourceUrl: row.url || "",
     snippet: content.slice(0, 160) + (content.length > 160 ? "…" : ""),
     body: paragraphs.length ? paragraphs : [content],
-    createdAt: row.created_at
+    createdAt: row.created_at,
   }
 }
 
-const fetcher = (url: string) => {
+// --- 🔁 Refresh token helper (same as extension) ---
+const SUPABASE_URL = "https://oiwjjpsdtxkagyuhrzfw.supabase.co"
+const SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pd2pqcHNkdHhrYWd5dWhyemZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2OTU0NzgsImV4cCI6MjEwMDI3MTQ3OH0.DhfPMIGJhNE7BH7-ygKtF77rKgtcKFp0f4xHnBCCCRw"
+
+async function refreshAccessToken(): Promise<string> {
+  const refreshToken = localStorage.getItem("qsaver_refresh_token")
+  if (!refreshToken) throw new Error("No refresh token available")
+
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  })
+  const data = await res.json()
+  if (!res.ok) {
+    throw new Error(data.error_description || data.msg || "Refresh failed")
+  }
+  // Store new tokens
+  localStorage.setItem("qsaver_session_token", data.access_token)
+  localStorage.setItem("qsaver_refresh_token", data.refresh_token)
+  document.cookie = `session_token=${data.access_token}; path=/; max-age=604800; SameSite=Lax; Secure`
+  return data.access_token
+}
+
+// --- ✅ Smart fetcher with auto-refresh ---
+const fetcher = async (url: string) => {
   const token = localStorage.getItem("qsaver_session_token")
-  return fetch(url, {
-    headers: { Authorization: token ? `Bearer ${token}` : "" },
-  }).then((r) => r.json())
+
+  const fetchWithToken = (t: string) =>
+    fetch(url, {
+      headers: { Authorization: `Bearer ${t}` },
+    })
+
+  try {
+    let res = await fetchWithToken(token || "")
+    if (!res.ok && (res.status === 401 || res.status === 403)) {
+      // Token expired – refresh and retry
+      const newToken = await refreshAccessToken()
+      res = await fetchWithToken(newToken)
+    }
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
+    }
+    return res.json()
+  } catch (e) {
+    // If refresh fails or network error, throw so SWR can handle it
+    throw e
+  }
 }
 
 export default function Page() {
   const router = useRouter()
   const { mutate: globalMutate } = useSWRConfig()
   const toast = useToast()
-  
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [currentTab, setCurrentTab] = useState<string>("All Saves")
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -99,7 +146,7 @@ export default function Page() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   // Context Menu State
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, id: string } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; id: string } | null>(null)
 
   // Modals
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -130,9 +177,10 @@ export default function Page() {
     }
   }, [router])
 
+  // --- SWR with the enhanced fetcher ---
   const { data, error, isLoading, mutate } = useSWR<ApiRow[]>(
     isAuthenticated ? "/api/save" : null,
-    fetcher, 
+    fetcher,
     { refreshInterval: 5000 }
   )
 
@@ -143,37 +191,43 @@ export default function Page() {
 
   const processedSaves = useMemo(() => {
     if (!data || !Array.isArray(data)) return []
-    
     let items = data
-      .filter(row => !pendingDeletions.includes(String(row.id)))
+      .filter((row) => !pendingDeletions.includes(String(row.id)))
       .map(normalize)
 
     if (selectedTag) {
-      items = items.filter(s => s.tag.toLowerCase() === selectedTag.toLowerCase())
+      items = items.filter((s) => s.tag.toLowerCase() === selectedTag.toLowerCase())
     }
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
-      items = items.filter(s => 
-        s.title.toLowerCase().includes(q) || 
-        s.author.toLowerCase().includes(q) || 
-        s.body.join(" ").toLowerCase().includes(q)
+      items = items.filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          s.author.toLowerCase().includes(q) ||
+          s.body.join(" ").toLowerCase().includes(q)
       )
     }
 
     return items.sort((a, b) => {
       switch (sortOption) {
-        case "newest": return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        case "oldest": return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        case "title-asc": return a.title.localeCompare(b.title)
-        case "title-desc": return b.title.localeCompare(a.title)
-        case "author": return a.author.localeCompare(b.author)
-        default: return 0
+        case "newest":
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        case "oldest":
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        case "title-asc":
+          return a.title.localeCompare(b.title)
+        case "title-desc":
+          return b.title.localeCompare(a.title)
+        case "author":
+          return a.author.localeCompare(b.author)
+        default:
+          return 0
       }
     })
   }, [data, selectedTag, searchQuery, sortOption, pendingDeletions])
 
-  const selectedPost = processedSaves.find(s => s.id === selectedId) || null
+  const selectedPost = processedSaves.find((s) => s.id === selectedId) || null
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -194,7 +248,7 @@ export default function Page() {
   }, [selectedId])
 
   const handleDuplicate = async (postId?: string) => {
-    const post = postId ? processedSaves.find(s => s.id === postId) : selectedPost
+    const post = postId ? processedSaves.find((s) => s.id === postId) : selectedPost
     if (!post) return
     try {
       await duplicatePost({
@@ -203,7 +257,7 @@ export default function Page() {
         contentText: post.body.join("\n\n"),
         tag: post.tag,
         type: post.kind,
-        url: post.sourceUrl
+        url: post.sourceUrl,
       })
       mutate()
       toast.success("Post duplicated!")
@@ -215,22 +269,22 @@ export default function Page() {
   const handleDelete = async (postId?: string) => {
     const idToDelete = postId || selectedId
     if (!idToDelete) return
-    
+
     setIsDeleteModalOpen(false)
     if (selectedId === idToDelete) setSelectedId(null)
 
-    setPendingDeletions(prev => [...prev, idToDelete])
+    setPendingDeletions((prev) => [...prev, idToDelete])
 
     const timer = setTimeout(async () => {
       try {
         await deletePost({ id: idToDelete })
         mutate()
         globalMutate("/api/save/tags")
-        setPendingDeletions(prev => prev.filter(id => id !== idToDelete))
+        setPendingDeletions((prev) => prev.filter((id) => id !== idToDelete))
         delete timeouts.current[idToDelete]
       } catch (err) {
         toast.error("Failed to delete post")
-        setPendingDeletions(prev => prev.filter(id => id !== idToDelete))
+        setPendingDeletions((prev) => prev.filter((id) => id !== idToDelete))
       }
     }, 5000)
 
@@ -241,10 +295,10 @@ export default function Page() {
       onClick: () => {
         clearTimeout(timeouts.current[idToDelete])
         delete timeouts.current[idToDelete]
-        setPendingDeletions(prev => prev.filter(id => id !== idToDelete))
+        setPendingDeletions((prev) => prev.filter((id) => id !== idToDelete))
         setSelectedId(idToDelete)
         toast.success("Deletion cancelled")
-      }
+      },
     })
   }
 
@@ -275,7 +329,7 @@ export default function Page() {
   }
 
   const handleCopyMarkdown = (postId?: string) => {
-    const post = postId ? processedSaves.find(s => s.id === postId) : selectedPost
+    const post = postId ? processedSaves.find((s) => s.id === postId) : selectedPost
     if (!post) return
     const md = `# ${post.title}\nBy ${post.author}\n\n${post.body.join("\n\n")}`
     navigator.clipboard.writeText(md)
@@ -283,7 +337,7 @@ export default function Page() {
   }
 
   const handleShare = (postId?: string) => {
-    const post = postId ? processedSaves.find(s => s.id === postId) : selectedPost
+    const post = postId ? processedSaves.find((s) => s.id === postId) : selectedPost
     if (!post?.sourceUrl) return
     navigator.clipboard.writeText(post.sourceUrl)
     toast.success("Source link copied!")
@@ -299,7 +353,22 @@ export default function Page() {
       <main className="flex h-dvh items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-3">
           <div className="size-10 animate-spin rounded-full border-4 border-blue-500/30 border-t-blue-600"></div>
-          <p className="text-sm font-bold text-muted-foreground animate-pulse uppercase tracking-widest">Initialising Library...</p>
+          <p className="animate-pulse text-sm font-bold uppercase tracking-widest text-muted-foreground">
+            Initialising Library...
+          </p>
+        </div>
+      </main>
+    )
+  }
+
+  if (error) {
+    return (
+      <main className="flex h-dvh items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="rounded-2xl border border-red-200/50 bg-red-50/80 p-8 text-center backdrop-blur-sm dark:border-red-900/30 dark:bg-red-950/20">
+          <p className="text-lg font-semibold text-red-700 dark:text-red-300">⚠️ Connection error</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Could not reach the cloud archive. Please try again later.
+          </p>
         </div>
       </main>
     )
@@ -307,8 +376,8 @@ export default function Page() {
 
   return (
     <main className="flex h-dvh w-full overflow-hidden bg-slate-50 dark:bg-zinc-950">
-      <Sidebar 
-        currentTab={currentTab} 
+      <Sidebar
+        currentTab={currentTab}
         onTabChange={(tab, tag) => {
           setCurrentTab(tab)
           setSelectedTag(tag)
@@ -320,7 +389,7 @@ export default function Page() {
         onOpenTagManager={() => setIsTagManagerOpen(true)}
       />
 
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="relative flex flex-1 overflow-hidden">
         {currentTab === "All Saves" ? (
           <>
             <FeedList
@@ -332,19 +401,25 @@ export default function Page() {
               sortOption={sortOption}
               onSortChange={setSortOption}
               selectedIds={selectedIds}
-              onToggleSelect={(id) => setSelectedIds(prev => 
-                prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-              )}
-              onSelectAll={() => setSelectedIds(
-                selectedIds.length === processedSaves.length ? [] : processedSaves.map(s => s.id)
-              )}
+              onToggleSelect={(id) =>
+                setSelectedIds((prev) =>
+                  prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+                )
+              }
+              onSelectAll={() =>
+                setSelectedIds(
+                  selectedIds.length === processedSaves.length
+                    ? []
+                    : processedSaves.map((s) => s.id)
+                )
+              }
               onBulkDelete={() => setIsBulkDeleteModalOpen(true)}
               onBulkTag={() => setIsBulkTagModalOpen(true)}
               onContextMenu={handleContextMenu}
             />
             {selectedPost ? (
-              <ReadingView 
-                item={selectedPost} 
+              <ReadingView
+                item={selectedPost}
                 onEdit={() => setIsEditModalOpen(true)}
                 onDelete={() => setIsDeleteModalOpen(true)}
                 onDuplicate={() => handleDuplicate()}
@@ -352,62 +427,133 @@ export default function Page() {
                 onShare={() => handleShare()}
               />
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-10 bg-white/30 dark:bg-zinc-900/10 backdrop-blur-sm">
-                <div className="size-16 rounded-3xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mb-6">
+              <div className="flex flex-1 flex-col items-center justify-center bg-white/30 p-10 text-center backdrop-blur-sm dark:bg-zinc-900/10">
+                <div className="mb-6 flex size-16 items-center justify-center rounded-3xl bg-blue-50 dark:bg-blue-900/20">
                   <Layers className="size-8 text-blue-500" />
                 </div>
                 <h3 className="text-xl font-bold text-foreground">Nothing Selected</h3>
-                <p className="text-sm text-muted-foreground mt-2 max-w-xs">
-                  Pick a post from the list to view its contents, edit details, or export to your blog.
+                <p className="mt-2 max-w-xs text-sm text-muted-foreground">
+                  Pick a post from the list to view its contents, edit details, or export to your
+                  blog.
                 </p>
               </div>
             )}
           </>
         ) : currentTab === "Settings" ? (
-            <div className="flex-1 p-10 overflow-y-auto">
-                <div className="max-w-3xl mx-auto">
-                    <h1 className="text-4xl font-black mb-2 uppercase tracking-tighter">Settings</h1>
-                    <p className="text-muted-foreground mb-10">Manage your library preferences and system data.</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="p-8 bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-xl shadow-gray-200/20 dark:shadow-none">
-                            <div className="size-12 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mb-6"><FileDown className="size-6 text-blue-600" /></div>
-                            <h2 className="text-xl font-bold mb-3">Export Data</h2>
-                            <p className="text-sm text-muted-foreground mb-8 leading-relaxed">Download your curated library in CSV or JSON format for backups or external analysis.</p>
-                            <div className="flex flex-col gap-3">
-                                <button onClick={() => exportToCSV(processedSaves)} className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-700 transition active:scale-95 shadow-lg shadow-blue-500/25">Download CSV</button>
-                                <button onClick={() => exportToJSON(processedSaves)} className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gray-100 dark:bg-zinc-800 text-foreground rounded-2xl font-bold text-sm hover:bg-gray-200 dark:hover:bg-zinc-700 transition active:scale-95">Download JSON</button>
-                            </div>
-                        </div>
-                    </div>
+          <div className="flex-1 overflow-y-auto p-10">
+            <div className="mx-auto max-w-3xl">
+              <h1 className="mb-2 text-4xl font-black uppercase tracking-tighter">Settings</h1>
+              <p className="mb-10 text-muted-foreground">
+                Manage your library preferences and system data.
+              </p>
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="rounded-3xl border border-gray-100 bg-white p-8 shadow-xl shadow-gray-200/20 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
+                  <div className="mb-6 flex size-12 items-center justify-center rounded-2xl bg-blue-100 dark:bg-blue-900/30">
+                    <FileDown className="size-6 text-blue-600" />
+                  </div>
+                  <h2 className="mb-3 text-xl font-bold">Export Data</h2>
+                  <p className="mb-8 text-sm leading-relaxed text-muted-foreground">
+                    Download your curated library in CSV or JSON format for backups or external
+                    analysis.
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <button
+                      onClick={() => exportToCSV(processedSaves)}
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/25 transition hover:bg-blue-700 active:scale-95"
+                    >
+                      Download CSV
+                    </button>
+                    <button
+                      onClick={() => exportToJSON(processedSaves)}
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-100 px-6 py-3 text-sm font-bold text-foreground transition hover:bg-gray-200 active:scale-95 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                    >
+                      Download JSON
+                    </button>
+                  </div>
                 </div>
+              </div>
             </div>
+          </div>
         ) : null}
 
-        {/* CONTEXT MENU (Commandment #17) */}
+        {/* Context Menu */}
         {contextMenu && (
-          <div 
-            className="fixed z-[100] w-48 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl shadow-2xl py-2 overflow-hidden animate-in fade-in zoom-in duration-150"
+          <div
+            className="fixed z-[100] w-48 animate-in fade-in zoom-in-duration-150 overflow-hidden rounded-2xl border border-gray-200 bg-white py-2 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
             style={{ top: contextMenu.y, left: contextMenu.x }}
           >
-            <button onClick={() => { setSelectedId(contextMenu.id); setIsEditModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-zinc-800 transition text-left"><Edit2 className="size-4 text-blue-500" /> Edit Post</button>
-            <button onClick={() => handleDuplicate(contextMenu.id)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-zinc-800 transition text-left"><Copy className="size-4 text-indigo-500" /> Duplicate</button>
-            <button onClick={() => handleShare(contextMenu.id)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-zinc-800 transition text-left"><Share2 className="size-4 text-teal-500" /> Copy Link</button>
-            <div className="h-px bg-gray-100 dark:bg-zinc-800 my-1 mx-2" />
-            <button onClick={() => handleDelete(contextMenu.id)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 transition text-left"><Trash2 className="size-4" /> Delete Post</button>
+            <button
+              onClick={() => {
+                setSelectedId(contextMenu.id)
+                setIsEditModalOpen(true)
+              }}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-gray-100 dark:hover:bg-zinc-800"
+            >
+              <Edit2 className="size-4 text-blue-500" /> Edit Post
+            </button>
+            <button
+              onClick={() => handleDuplicate(contextMenu.id)}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-gray-100 dark:hover:bg-zinc-800"
+            >
+              <Copy className="size-4 text-indigo-500" /> Duplicate
+            </button>
+            <button
+              onClick={() => handleShare(contextMenu.id)}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-gray-100 dark:hover:bg-zinc-800"
+            >
+              <Share2 className="size-4 text-teal-500" /> Copy Link
+            </button>
+            <div className="my-1 mx-2 h-px bg-gray-100 dark:bg-zinc-800" />
+            <button
+              onClick={() => handleDelete(contextMenu.id)}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 transition hover:bg-red-50 dark:hover:bg-red-900/20"
+            >
+              <Trash2 className="size-4" /> Delete Post
+            </button>
           </div>
         )}
       </div>
 
       <ToastContainer toasts={toast.toasts} />
-      {selectedPost && <EditPostModal open={isEditModalOpen} post={selectedPost} onClose={() => setIsEditModalOpen(false)} onSave={() => { mutate(); globalMutate("/api/save/tags"); toast.success("Changes saved!"); }} />}
-      <DeleteConfirmModal open={isDeleteModalOpen} title="Delete Post" message="Are you sure you want to delete this post? It will be permanently removed from your library after 5 seconds." onConfirm={handleDelete} onClose={() => setIsDeleteModalOpen(false)} isDeleting={false} />
-      <DeleteConfirmModal open={isBulkDeleteModalOpen} title={`Delete ${selectedIds.length} items`} message="You are about to delete multiple posts. This action is permanent and cannot be undone." onConfirm={handleBulkDelete} onClose={() => setIsBulkDeleteModalOpen(false)} isDeleting={isBulkDeleting} />
-      <BulkActionModal open={isBulkTagModalOpen} count={selectedIds.length} onClose={() => setIsBulkTagModalOpen(false)} onConfirm={handleBulkTag} isProcessing={isBulkTagging} />
-      <TagManager open={isTagManagerOpen} onClose={() => setIsTagManagerOpen(false)} />
+      {selectedPost && (
+        <EditPostModal
+          open={isEditModalOpen}
+          post={selectedPost}
+          onClose={() => setIsEditModalOpen(false)}
+          onSave={() => {
+            mutate()
+            globalMutate("/api/save/tags")
+            toast.success("Changes saved!")
+          }}
+        />
+      )}
+      <DeleteConfirmModal
+        open={isDeleteModalOpen}
+        title="Delete Post"
+        message="Are you sure you want to delete this post? It will be permanently removed from your library after 5 seconds."
+        onConfirm={handleDelete}
+        onClose={() => setIsDeleteModalOpen(false)}
+        isDeleting={false}
+      />
+      <DeleteConfirmModal
+        open={isBulkDeleteModalOpen}
+        title={`Delete ${selectedIds.length} items`}
+        message="You are about to delete multiple posts. This action is permanent and cannot be undone."
+        onConfirm={handleBulkDelete}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        isDeleting={isBulkDeleting}
+      />
+      <BulkActionModal
+        open={isBulkTagModalOpen}
+        count={selectedIds.length}
+        onClose={() => setIsBulkTagModalOpen(false)}
+        onConfirm={handleBulkTag}
+        isProcessing={isBulkTagging}
+      />
+      <TagManager
+        open={isTagManagerOpen}
+        onClose={() => setIsTagManagerOpen(false)}
+      />
     </main>
   )
 }
-
-function Layers(props: any) { return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.1 6.27a2 2 0 0 0 0 3.66l9.07 4.09a2 2 0 0 0 1.66 0l9.07-4.09a2 2 0 0 0 0-3.66z" /><path d="m2.1 14.07 9.07 4.09a2 2 0 0 0 1.66 0l9.07-4.09" /><path d="m2.1 19.07 9.07 4.09a2 2 0 0 0 1.66 0l9.07-4.09" /></svg> }
-function FileDown(props: any) { return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="3" y2="15" /></svg> }
-function Rocket(props: any) { return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.71-2.13.09-2.91a2.18 2.18 0 0 0-3.09-.09z" /><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" /><path d="M9 12H4s.55-3.03 2-4.5c1.62-1.63 5-2 5-2" /><path d="M12 15v5s3.03-.55 4.5-2c1.63-1.62 2-5 2-5" /></svg> }
