@@ -19,7 +19,7 @@ export function EditPostModal({ post, open, onClose, onSave }: EditPostModalProp
     author: post.author,
     content: post.body.join("\n\n"),
     tag: post.tag,
-    type: post.kind
+    type: post.kind,
   })
 
   const { trigger, isMutating } = useEditPost()
@@ -30,7 +30,7 @@ export function EditPostModal({ post, open, onClose, onSave }: EditPostModalProp
       author: post.author,
       content: post.body.join("\n\n"),
       tag: post.tag,
-      type: post.kind
+      type: post.kind,
     })
   }, [post])
 
@@ -42,9 +42,12 @@ export function EditPostModal({ post, open, onClose, onSave }: EditPostModalProp
       await trigger({
         id: post.id,
         data: {
-          ...formData,
-          contentText: formData.content // API expects contentText
-        }
+          title: formData.title,
+          author: formData.author,
+          content: formData.content, // ✅ Correct field name
+          tag: formData.tag,
+          type: formData.type,
+        },
       })
       onSave()
       onClose()
@@ -71,7 +74,7 @@ export function EditPostModal({ post, open, onClose, onSave }: EditPostModalProp
               <input
                 required
                 value={formData.title}
-                onChange={e => setFormData({ ...formData, title: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-blue-500 outline-none transition"
               />
             </div>
@@ -80,7 +83,7 @@ export function EditPostModal({ post, open, onClose, onSave }: EditPostModalProp
               <input
                 required
                 value={formData.author}
-                onChange={e => setFormData({ ...formData, author: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, author: e.target.value })}
                 className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-blue-500 outline-none transition"
               />
             </div>
@@ -92,7 +95,7 @@ export function EditPostModal({ post, open, onClose, onSave }: EditPostModalProp
               <input
                 required
                 value={formData.tag}
-                onChange={e => setFormData({ ...formData, tag: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, tag: e.target.value })}
                 className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-blue-500 outline-none transition"
               />
             </div>
@@ -100,7 +103,7 @@ export function EditPostModal({ post, open, onClose, onSave }: EditPostModalProp
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</label>
               <select
                 value={formData.type}
-                onChange={e => setFormData({ ...formData, type: e.target.value as any })}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
                 className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-blue-500 outline-none transition"
               >
                 <option value="Post">Post</option>
@@ -115,7 +118,7 @@ export function EditPostModal({ post, open, onClose, onSave }: EditPostModalProp
               required
               rows={8}
               value={formData.content}
-              onChange={e => setFormData({ ...formData, content: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, content: e.target.value })}
               className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-blue-500 outline-none transition resize-none"
             />
           </div>
