@@ -1,34 +1,33 @@
-import { SaveItem } from "./saves";
+import type { SaveItem } from "@/lib/saves"
 
-export function downloadFile(content: string, filename: string, mimeType: string) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+export function exportToCSV(items: SaveItem[]) {
+  const headers = ["Title", "Author", "Tag", "Type", "Content", "URL", "Saved At"]
+  const rows = items.map((item) => [
+    item.title,
+    item.author,
+    item.tag,
+    item.kind,
+    item.body.join("\n"),
+    item.sourceUrl,
+    item.savedAt,
+  ])
+  const csv = [headers, ...rows].map((row) => row.join(",")).join("\n")
+  downloadFile(csv, "qsaver-export.csv", "text/csv")
 }
 
-export function exportToJSON(posts: SaveItem[]) {
-  const content = JSON.stringify(posts, null, 2);
-  downloadFile(content, `q-saver-export-${new Date().toISOString().split('T')[0]}.json`, "application/json");
+export function exportToJSON(items: SaveItem[]) {
+  const json = JSON.stringify(items, null, 2)
+  downloadFile(json, "qsaver-export.json", "application/json")
 }
 
-export function exportToCSV(posts: SaveItem[]) {
-  const headers = ["Title", "Author", "Tag", "Type", "URL", "Saved At", "Content"];
-  const rows = posts.map(post => [
-    `"${(post.title || "").replace(/"/g, '""')}"`,
-    `"${(post.author || "").replace(/"/g, '""')}"`,
-    `"${(post.tag || "").replace(/"/g, '""')}"`,
-    `"${(post.kind || "").replace(/"/g, '""')}"`,
-    `"${(post.sourceUrl || "").replace(/"/g, '""')}"`,
-    `"${(post.savedAt || "").replace(/"/g, '""')}"`,
-    `"${(post.body.join("\n") || "").replace(/"/g, '""')}"`
-  ]);
-
-  const csvContent = [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-  downloadFile(csvContent, `q-saver-export-${new Date().toISOString().split('T')[0]}.csv`, "text/csv;charset=utf-8;");
+function downloadFile(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
