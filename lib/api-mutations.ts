@@ -1,59 +1,90 @@
-import useSWRMutation from "swr/mutation";
+import useSWRMutation from "swr/mutation"
+import { useSWRConfig } from "swr"
 
-const getToken = () => localStorage.getItem("qsaver_session_token");
+const API = process.env.NEXT_PUBLIC_API_URL || "https://quora-posts-saver2.vercel.app"
 
-async function sendRequest(url: string, { arg }: { arg: any }, method: string = "POST") {
-  const token = getToken();
+// Helper to get token
+const getToken = () => localStorage.getItem("qsaver_session_token") || ""
+
+// Generic fetcher for mutations
+async function fetcher(url: string, { arg }: { arg: any }) {
+  const token = getToken()
   const res = await fetch(url, {
-    method,
+    method: arg.method || "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: token ? `Bearer ${token}` : "",
+      Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(arg),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+    body: arg.body ? JSON.stringify(arg.body) : undefined,
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `Request failed with status ${res.status}`)
+  }
+  return res.json()
 }
 
+// --- Single Post ---
 export function useEditPost() {
-  return useSWRMutation("/api/save", async (url, { arg }: { arg: { id: string; data: any } }) => {
-    return sendRequest(`${url}/${arg.id}`, { arg: arg.data }, "PUT");
-  });
+  return useSWRMutation("/api/save", (url, { arg }: { arg: { id: string; data: any } }) =>
+    fetcher(`${API}/api/save/${arg.id}`, {
+      method: "PUT",
+      body: arg.data,
+    })
+  )
 }
 
 export function useDeletePost() {
-  return useSWRMutation("/api/save", async (url, { arg }: { arg: { id: string } }) => {
-    return sendRequest(`${url}/${arg.id}`, { arg: {} }, "DELETE");
-  });
-}
-
-export function useBulkDelete() {
-  return useSWRMutation("/api/save/bulk", (url, { arg }: { arg: { ids: string[] } }) => {
-    return sendRequest(url, { arg }, "DELETE");
-  });
-}
-
-export function useBulkTagUpdate() {
-  return useSWRMutation("/api/save/bulk", (url, { arg }: { arg: { ids: string[]; tag: string } }) => {
-    return sendRequest(url, { arg }, "PATCH");
-  });
-}
-
-export function useRenameTag() {
-  return useSWRMutation("/api/save/tags", (url, { arg }: { arg: { oldName: string; newName: string } }) => {
-    return sendRequest(url, { arg }, "PUT");
-  });
-}
-
-export function useDeleteTag() {
-  return useSWRMutation("/api/save/tags", (url, { arg }: { arg: { tag: string } }) => {
-    return sendRequest(url, { arg }, "DELETE");
-  });
+  return useSWRMutation("/api/save", (url, { arg }: { arg: { id: string } }) =>
+    fetcher(`${API}/api/save/${arg.id}`, {
+      method: "DELETE",
+    })
+  )
 }
 
 export function useDuplicatePost() {
-  return useSWRMutation("/api/save", (url, { arg }: { arg: any }) => {
-    return sendRequest(url, { arg }, "POST");
-  });
+  return useSWRMutation("/api/save", (url, { arg }: { arg: any }) =>
+    fetcher(`${API}/api/save`, {
+      method: "POST",
+      body: arg,
+    })
+  )
+}
+
+// --- Bulk ---
+export function useBulkDelete() {
+  return useSWRMutation("/api/save/bulk", (url, { arg }: { arg: { ids: string[] } }) =>
+    fetcher(`${API}/api/save/bulk`, {
+      method: "DELETE",
+      body: { ids: arg.ids },
+    })
+  )
+}
+
+export function useBulkTagUpdate() {
+  return useSWRMutation("/api/save/bulk", (url, { arg }: { arg: { ids: string[]; tag: string } }) =>
+    fetcher(`${API}/api/save/bulk`, {
+      method: "PATCH",
+      body: { ids: arg.ids, tag: arg.tag },
+    })
+  )
+}
+
+// --- Tags ---
+export function useRenameTag() {
+  return useSWRMutation("/api/save/tags", (url, { arg }: { arg: { oldName: string; newName: string } }) =>
+    fetcher(`${API}/api/save/tags`, {
+      method: "PUT",
+      body: { oldName: arg.oldName, newName: arg.newName },
+    })
+  )
+}
+
+export function useDeleteTag() {
+  return useSWRMutation("/api/save/tags", (url, { arg }: { arg: { tag: string } }) =>
+    fetcher(`${API}/api/save/tags`, {
+      method: "DELETE",
+      body: { tag: arg.tag },
+    })
+  )
 }
