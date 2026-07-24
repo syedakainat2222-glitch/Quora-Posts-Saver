@@ -16,7 +16,6 @@ export async function OPTIONS() {
 async function getUserIdFromToken(token: string): Promise<string | null> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
   if (!supabaseUrl || !supabaseAnonKey) return null;
 
   try {
@@ -26,9 +25,7 @@ async function getUserIdFromToken(token: string): Promise<string | null> {
         apikey: supabaseAnonKey,
       },
     });
-
     if (!response.ok) return null;
-
     const userData = await response.json();
     return userData.id || null;
   } catch (error) {
@@ -37,12 +34,14 @@ async function getUserIdFromToken(token: string): Promise<string | null> {
   }
 }
 
-// EDIT Post
+// ✅ EDIT Post – fixed params handling
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params; // ✅ await the Promise
+
     const authHeader = request.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders() });
@@ -61,7 +60,7 @@ export async function PUT(
       `UPDATE saved_posts 
        SET title = $1, author = $2, content = $3, tag = $4, type = $5
        WHERE id = $6 AND user_id = $7`,
-      [title, author, content, tag, type, params.id, userId]
+      [title, author, content, tag, type, id, userId]
     );
 
     if (rowCount === 0) {
@@ -70,16 +69,19 @@ export async function PUT(
 
     return NextResponse.json({ success: true }, { status: 200, headers: corsHeaders() });
   } catch (error) {
+    console.error("PUT error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500, headers: corsHeaders() });
   }
 }
 
-// DELETE Post
+// ✅ DELETE Post – fixed params handling
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params;
+
     const authHeader = request.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders() });
@@ -93,7 +95,7 @@ export async function DELETE(
 
     const { rowCount } = await pool.query(
       "DELETE FROM saved_posts WHERE id = $1 AND user_id = $2",
-      [params.id, userId]
+      [id, userId]
     );
 
     if (rowCount === 0) {
@@ -102,6 +104,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true }, { status: 200, headers: corsHeaders() });
   } catch (error) {
+    console.error("DELETE error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500, headers: corsHeaders() });
   }
 }
