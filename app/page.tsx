@@ -18,7 +18,6 @@ import type { SaveItem, SaveKind } from "@/lib/saves"
 import { SortOption } from "@/components/sort-dropdown"
 import { Edit2, Trash2, Copy, Share2, Layers, FileDown } from "lucide-react"
 
-// ✅ Define API base URL
 const API = "https://quora-posts-saver2.vercel.app"
 
 type ApiRow = {
@@ -73,7 +72,7 @@ function normalize(row: ApiRow): SaveItem {
   }
 }
 
-// --- Refresh token helper (same as before) ---
+// --- Refresh token helper ---
 const SUPABASE_URL = "https://oiwjjpsdtxkagyuhrzfw.supabase.co"
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pd2pqcHNkdHhrYWd5dWhyemZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2OTU0NzgsImV4cCI6MjEwMDI3MTQ3OH0.DhfPMIGJhNE7BH7-ygKtF77rKgtcKFp0f4xHnBCCCRw"
@@ -94,7 +93,6 @@ async function refreshAccessToken(): Promise<string> {
   return data.access_token
 }
 
-// --- Smart fetcher ---
 const fetcher = async (url: string) => {
   const token = localStorage.getItem("qsaver_session_token")
   const fetchWithToken = (t: string) =>
@@ -194,13 +192,11 @@ export default function Page() {
 
   const selectedPost = processedSaves.find((s) => s.id === selectedId) || null
 
-  // ---------- DELETE (DIRECT FETCH) ----------
+  // ---------- DELETE ----------
   const handleDelete = async (postId?: string) => {
     const idToDelete = postId || selectedId
     if (!idToDelete) return
-
     setIsDeleteModalOpen(false)
-
     try {
       const token = localStorage.getItem("qsaver_session_token")
       const res = await fetch(`${API}/api/save/${idToDelete}`, {
@@ -208,12 +204,9 @@ export default function Page() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || `Delete failed with status ${res.status}`)
-      }
-      // Remove from pending state if any
+      if (!res.ok) throw new Error(data.error || `Delete failed with status ${res.status}`)
       setPendingDeletions((prev) => prev.filter((id) => id !== idToDelete))
-      mutate() // refresh the list
+      mutate()
       globalMutate("/api/save/tags")
       toast.success("Post deleted")
       if (selectedId === idToDelete) setSelectedId(null)
@@ -223,7 +216,7 @@ export default function Page() {
     }
   }
 
-  // ---------- OTHER HANDLERS ----------
+  // ---------- DUPLICATE ----------
   const handleDuplicate = async (postId?: string) => {
     const post = postId ? processedSaves.find((s) => s.id === postId) : selectedPost
     if (!post) return
@@ -243,6 +236,7 @@ export default function Page() {
     }
   }
 
+  // ---------- BULK ----------
   const handleBulkDelete = async () => {
     try {
       await bulkDelete({ ids: selectedIds })
@@ -269,6 +263,7 @@ export default function Page() {
     }
   }
 
+  // ---------- COPY MARKDOWN & SHARE ----------
   const handleCopyMarkdown = (postId?: string) => {
     const post = postId ? processedSaves.find((s) => s.id === postId) : selectedPost
     if (!post) return
@@ -289,6 +284,7 @@ export default function Page() {
     setContextMenu({ x: e.clientX, y: e.clientY, id })
   }
 
+  // ---------- KEYBOARD SHORTCUTS ----------
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
@@ -307,6 +303,7 @@ export default function Page() {
     }
   }, [selectedId])
 
+  // ---------- RENDER ----------
   if (isAuthenticated === null || isLoading) {
     return (
       <main className="flex h-dvh items-center justify-center bg-slate-50 dark:bg-slate-950">
@@ -462,18 +459,21 @@ export default function Page() {
       </div>
 
       <ToastContainer toasts={toast.toasts} />
+
       {selectedPost && (
         <EditPostModal
           open={isEditModalOpen}
           post={selectedPost}
           onClose={() => setIsEditModalOpen(false)}
-          onSave={() => {
-            mutate()
+          onSave={async () => {
+            // ✅ Force re‑fetch and update the selected post
+            await mutate()  // re‑fetch the list
             globalMutate("/api/save/tags")
             toast.success("Changes saved!")
           }}
         />
       )}
+
       <DeleteConfirmModal
         open={isDeleteModalOpen}
         title="Delete Post"
@@ -482,6 +482,7 @@ export default function Page() {
         onClose={() => setIsDeleteModalOpen(false)}
         isDeleting={false}
       />
+
       <DeleteConfirmModal
         open={isBulkDeleteModalOpen}
         title={`Delete ${selectedIds.length} items`}
@@ -490,6 +491,7 @@ export default function Page() {
         onClose={() => setIsBulkDeleteModalOpen(false)}
         isDeleting={isBulkDeleting}
       />
+
       <BulkActionModal
         open={isBulkTagModalOpen}
         count={selectedIds.length}
@@ -497,6 +499,7 @@ export default function Page() {
         onConfirm={handleBulkTag}
         isProcessing={isBulkTagging}
       />
+
       <TagManager
         open={isTagManagerOpen}
         onClose={() => setIsTagManagerOpen(false)}
