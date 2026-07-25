@@ -4,92 +4,120 @@ const API = process.env.NEXT_PUBLIC_API_URL || "https://quora-posts-saver2.verce
 
 const getToken = () => localStorage.getItem("qsaver_session_token") || ""
 
-// Generic mutator – handles all HTTP methods
-async function mutator(url: string, { arg }: { arg: { method: string; body?: any } }) {
-  const token = getToken()
-  const { method, body } = arg
-
-  console.log(`[API] ${method} ${url}`, { token: token ? "present" : "missing", body })
-
-  const res = await fetch(url, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-
-  const text = await res.text()
-  console.log(`[API] Response ${res.status}:`, text)
-
-  if (!res.ok) {
-    throw new Error(text || `Request failed with status ${res.status}`)
-  }
-  return text ? JSON.parse(text) : null
-}
-
 // --- Single Post ---
 export function useEditPost() {
-  return useSWRMutation("/api/save", (url, { arg }: { arg: { id: string; data: any } }) =>
-    mutator(`${API}/api/save/${arg.id}`, {
+  return useSWRMutation("/api/save", async (url, { arg }: { arg: { id: string; data: any } }) => {
+    const token = getToken()
+    const res = await fetch(`${API}/api/save/${arg.id}`, {
       method: "PUT",
-      body: arg.data,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(arg.data),
     })
-  )
+    const text = await res.text()
+    if (!res.ok) throw new Error(text || `Edit failed with status ${res.status}`)
+    return text ? JSON.parse(text) : { success: true }
+  })
 }
 
 export function useDeletePost() {
-  return useSWRMutation("/api/save", (url, { arg }: { arg: { id: string } }) =>
-    mutator(`${API}/api/save/${arg.id}`, {
+  return useSWRMutation("/api/save", async (url, { arg }: { arg: { id: string } }) => {
+    const token = getToken()
+    const res = await fetch(`${API}/api/save/${arg.id}`, {
       method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
     })
-  )
+    const text = await res.text()
+    if (!res.ok) throw new Error(text || `Delete failed with status ${res.status}`)
+    return text ? JSON.parse(text) : { success: true }
+  })
 }
 
 export function useDuplicatePost() {
-  return useSWRMutation("/api/save", (url, { arg }: { arg: any }) =>
-    mutator(`${API}/api/save`, {
+  return useSWRMutation("/api/save", async (url, { arg }: { arg: any }) => {
+    const token = getToken()
+    const res = await fetch(`${API}/api/save`, {
       method: "POST",
-      body: arg,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(arg),
     })
-  )
+    const text = await res.text()
+    if (!res.ok) throw new Error(text || `Duplicate failed with status ${res.status}`)
+    return JSON.parse(text)
+  })
 }
 
 // --- Bulk ---
 export function useBulkDelete() {
-  return useSWRMutation("/api/save/bulk", (url, { arg }: { arg: { ids: string[] } }) =>
-    mutator(`${API}/api/save/bulk`, {
+  return useSWRMutation("/api/save/bulk", async (url, { arg }: { arg: { ids: string[] } }) => {
+    const token = getToken()
+    const res = await fetch(`${API}/api/save/bulk`, {
       method: "DELETE",
-      body: { ids: arg.ids },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ ids: arg.ids }),
     })
-  )
+    const text = await res.text()
+    if (!res.ok) throw new Error(text || `Bulk delete failed with status ${res.status}`)
+    return text ? JSON.parse(text) : { success: true }
+  })
 }
 
 export function useBulkTagUpdate() {
-  return useSWRMutation("/api/save/bulk", (url, { arg }: { arg: { ids: string[]; tag: string } }) =>
-    mutator(`${API}/api/save/bulk`, {
+  return useSWRMutation("/api/save/bulk", async (url, { arg }: { arg: { ids: string[]; tag: string } }) => {
+    const token = getToken()
+    const res = await fetch(`${API}/api/save/bulk`, {
       method: "PATCH",
-      body: { ids: arg.ids, tag: arg.tag },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ ids: arg.ids, tag: arg.tag }),
     })
-  )
+    const text = await res.text()
+    if (!res.ok) throw new Error(text || `Bulk tag update failed with status ${res.status}`)
+    return text ? JSON.parse(text) : { success: true }
+  })
 }
 
 // --- Tags ---
 export function useRenameTag() {
-  return useSWRMutation("/api/save/tags", (url, { arg }: { arg: { oldName: string; newName: string } }) =>
-    mutator(`${API}/api/save/tags`, {
+  return useSWRMutation("/api/save/tags", async (url, { arg }: { arg: { oldName: string; newName: string } }) => {
+    const token = getToken()
+    const res = await fetch(`${API}/api/save/tags`, {
       method: "PUT",
-      body: { oldName: arg.oldName, newName: arg.newName },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ oldName: arg.oldName, newName: arg.newName }),
     })
-  )
+    const text = await res.text()
+    if (!res.ok) throw new Error(text || `Rename tag failed with status ${res.status}`)
+    return text ? JSON.parse(text) : { success: true }
+  })
 }
 
 export function useDeleteTag() {
-  return useSWRMutation("/api/save/tags", (url, { arg }: { arg: { tag: string } }) =>
-    mutator(`${API}/api/save/tags`, {
+  return useSWRMutation("/api/save/tags", async (url, { arg }: { arg: { tag: string } }) => {
+    const token = getToken()
+    const res = await fetch(`${API}/api/save/tags`, {
       method: "DELETE",
-      body: { tag: arg.tag },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ tag: arg.tag }),
     })
-  )
+    const text = await res.text()
+    if (!res.ok) throw new Error(text || `Delete tag failed with status ${res.status}`)
+    return text ? JSON.parse(text) : { success: true }
+  })
 }
