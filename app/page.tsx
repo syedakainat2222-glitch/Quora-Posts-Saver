@@ -164,10 +164,25 @@ export default function Page() {
       router.push("/login")
     } else {
       setIsAuthenticated(true)
+
+      // ✅ Get user email and set display name
       const savedName = localStorage.getItem("qsaver_display_name")
+      const email = localStorage.getItem("qsaver_user_email")
+
       if (savedName) {
         setUserDisplayName(savedName)
         setInputName(savedName)
+      } else if (email) {
+        // Use the local part of the email as the default name
+        const defaultName = email.split('@')[0] || "User"
+        setUserDisplayName(defaultName)
+        setInputName(defaultName)
+        // Optionally save it so it persists
+        localStorage.setItem("qsaver_display_name", defaultName)
+      } else {
+        // Fallback
+        setUserDisplayName("User")
+        setInputName("User")
       }
     }
     return () => {
