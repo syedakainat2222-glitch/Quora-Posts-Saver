@@ -1,16 +1,15 @@
 import useSWRMutation from "swr/mutation"
-import { useSWRConfig } from "swr"
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://quora-posts-saver2.vercel.app"
 
 const getToken = () => localStorage.getItem("qsaver_session_token") || ""
 
-async function fetcher(url: string, { arg }: { arg: any }) {
+// Generic mutator – handles all HTTP methods
+async function mutator(url: string, { arg }: { arg: { method: string; body?: any } }) {
   const token = getToken()
-  const method = arg.method || "POST"
-  const body = arg.body ? JSON.stringify(arg.body) : undefined
+  const { method, body } = arg
 
-  console.log(`[Mutation] ${method} ${url}`, { token: token ? "present" : "missing", body })
+  console.log(`[API] ${method} ${url}`, { token: token ? "present" : "missing", body })
 
   const res = await fetch(url, {
     method,
@@ -18,22 +17,22 @@ async function fetcher(url: string, { arg }: { arg: any }) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body,
+    body: body ? JSON.stringify(body) : undefined,
   })
 
   const text = await res.text()
-  console.log(`[Mutation] Response status: ${res.status}, body: ${text}`)
+  console.log(`[API] Response ${res.status}:`, text)
 
   if (!res.ok) {
     throw new Error(text || `Request failed with status ${res.status}`)
   }
-  return JSON.parse(text)
+  return text ? JSON.parse(text) : null
 }
 
 // --- Single Post ---
 export function useEditPost() {
   return useSWRMutation("/api/save", (url, { arg }: { arg: { id: string; data: any } }) =>
-    fetcher(`${API}/api/save/${arg.id}`, {
+    mutator(`${API}/api/save/${arg.id}`, {
       method: "PUT",
       body: arg.data,
     })
@@ -42,7 +41,7 @@ export function useEditPost() {
 
 export function useDeletePost() {
   return useSWRMutation("/api/save", (url, { arg }: { arg: { id: string } }) =>
-    fetcher(`${API}/api/save/${arg.id}`, {
+    mutator(`${API}/api/save/${arg.id}`, {
       method: "DELETE",
     })
   )
@@ -50,7 +49,7 @@ export function useDeletePost() {
 
 export function useDuplicatePost() {
   return useSWRMutation("/api/save", (url, { arg }: { arg: any }) =>
-    fetcher(`${API}/api/save`, {
+    mutator(`${API}/api/save`, {
       method: "POST",
       body: arg,
     })
@@ -60,7 +59,7 @@ export function useDuplicatePost() {
 // --- Bulk ---
 export function useBulkDelete() {
   return useSWRMutation("/api/save/bulk", (url, { arg }: { arg: { ids: string[] } }) =>
-    fetcher(`${API}/api/save/bulk`, {
+    mutator(`${API}/api/save/bulk`, {
       method: "DELETE",
       body: { ids: arg.ids },
     })
@@ -69,7 +68,7 @@ export function useBulkDelete() {
 
 export function useBulkTagUpdate() {
   return useSWRMutation("/api/save/bulk", (url, { arg }: { arg: { ids: string[]; tag: string } }) =>
-    fetcher(`${API}/api/save/bulk`, {
+    mutator(`${API}/api/save/bulk`, {
       method: "PATCH",
       body: { ids: arg.ids, tag: arg.tag },
     })
@@ -79,7 +78,7 @@ export function useBulkTagUpdate() {
 // --- Tags ---
 export function useRenameTag() {
   return useSWRMutation("/api/save/tags", (url, { arg }: { arg: { oldName: string; newName: string } }) =>
-    fetcher(`${API}/api/save/tags`, {
+    mutator(`${API}/api/save/tags`, {
       method: "PUT",
       body: { oldName: arg.oldName, newName: arg.newName },
     })
@@ -88,7 +87,7 @@ export function useRenameTag() {
 
 export function useDeleteTag() {
   return useSWRMutation("/api/save/tags", (url, { arg }: { arg: { tag: string } }) =>
-    fetcher(`${API}/api/save/tags`, {
+    mutator(`${API}/api/save/tags`, {
       method: "DELETE",
       body: { tag: arg.tag },
     })
