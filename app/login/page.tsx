@@ -45,11 +45,12 @@ export default function LoginPage() {
       }
 
       if (!isSignUp && data.access_token) {
-        // ✅ Store BOTH tokens
+        // ✅ Store tokens AND email
         localStorage.setItem("qsaver_session_token", data.access_token)
         localStorage.setItem("qsaver_refresh_token", data.refresh_token)
+        localStorage.setItem("qsaver_user_email", email) // ⬅️ store email
 
-        // Keep the cookie for middleware (if you use it)
+        // Keep the cookie for middleware
         document.cookie = `session_token=${data.access_token}; path=/; max-age=604800; SameSite=Lax; Secure`
 
         alert("🎉 Login Successful! Redirecting to your workspace feed dashboard...")
