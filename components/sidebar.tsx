@@ -5,20 +5,15 @@ import useSWR from "swr"
 import {
   HardDrive,
   Layers,
-  Tags,
-  Rss,
   Settings,
   Hash,
   LogOut,
-  PlusCircle,
   Settings2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const nav = [
   { name: "All Saves", icon: Layers },
-  { name: "Folders/Tags", icon: Tags },
-  { name: "Connected Blogs", icon: Rss },
   { name: "Settings", icon: Settings },
 ]
 
@@ -86,7 +81,7 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Navigation */}
+      {/* Navigation – only All Saves and Settings */}
       <nav className="flex flex-col gap-1 px-3">
         {nav.map((item) => {
           const isActive = currentTab === item.name && selectedTag === null
@@ -113,7 +108,7 @@ export function Sidebar({
         })}
       </nav>
 
-      {/* Tags */}
+      {/* Tags section (unchanged) */}
       <div className="mt-6 px-3 flex-1 overflow-y-auto min-h-0">
         <div className="flex items-center justify-between px-3 pb-2">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
