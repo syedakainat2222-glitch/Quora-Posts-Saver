@@ -3,25 +3,31 @@ import { useSWRConfig } from "swr"
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://quora-posts-saver2.vercel.app"
 
-// Helper to get token
 const getToken = () => localStorage.getItem("qsaver_session_token") || ""
 
-// Generic fetcher for mutations
 async function fetcher(url: string, { arg }: { arg: any }) {
   const token = getToken()
+  const method = arg.method || "POST"
+  const body = arg.body ? JSON.stringify(arg.body) : undefined
+
+  console.log(`[Mutation] ${method} ${url}`, { token: token ? "present" : "missing", body })
+
   const res = await fetch(url, {
-    method: arg.method || "POST",
+    method,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: arg.body ? JSON.stringify(arg.body) : undefined,
+    body,
   })
+
+  const text = await res.text()
+  console.log(`[Mutation] Response status: ${res.status}, body: ${text}`)
+
   if (!res.ok) {
-    const text = await res.text()
     throw new Error(text || `Request failed with status ${res.status}`)
   }
-  return res.json()
+  return JSON.parse(text)
 }
 
 // --- Single Post ---
