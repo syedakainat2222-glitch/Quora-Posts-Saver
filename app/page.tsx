@@ -93,16 +93,40 @@ async function refreshAccessToken(): Promise<string> {
   return data.access_token
 }
 
+// --- Smart fetcher with 401 handling ---
 const fetcher = async (url: string) => {
   const token = localStorage.getItem("qsaver_session_token")
-  const fetchWithToken = (t: string) =>
-    fetch(url, { headers: { Authorization: `Bearer ${t}` } })
-  let res = await fetchWithToken(token || "")
-  if (!res.ok && (res.status === 401 || res.status === 403)) {
-    const newToken = await refreshAccessToken()
-    res = await fetchWithToken(newToken)
+  console.log("[fetcher] Token present?", !!token)
+
+  const fetchWithToken = (t: string) => {
+    console.log("[fetcher] Fetching with token")
+    return fetch(url, { headers: { Authorization: `Bearer ${t}` } })
   }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+  let res = await fetchWithToken(token || "")
+  console.log("[fetcher] Initial response status:", res.status)
+
+  // If token expired (401) – refresh and retry once
+  if (res.status === 401) {
+    console.log("[fetcher] 401 received – attempting refresh")
+    try {
+      const newToken = await refreshAccessToken()
+      console.log("[fetcher] Refresh successful")
+      res = await fetchWithToken(newToken)
+      console.log("[fetcher] Retry response status:", res.status)
+    } catch (refreshError) {
+      console.error("[fetcher] Refresh failed:", refreshError)
+      // If refresh fails, throw the error so SWR can handle it
+      throw refreshError
+    }
+  }
+
+  if (!res.ok) {
+    const text = await res.text()
+    console.error("[fetcher] Final response error:", text)
+    throw new Error(`HTTP ${res.status}: ${text}`)
+  }
+
   return res.json()
 }
 
@@ -466,8 +490,7 @@ export default function Page() {
           post={selectedPost}
           onClose={() => setIsEditModalOpen(false)}
           onSave={async () => {
-            // ✅ Force re‑fetch and update the selected post
-            await mutate()  // re‑fetch the list
+            await mutate()
             globalMutate("/api/save/tags")
             toast.success("Changes saved!")
           }}
