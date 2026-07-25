@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { useEditPost } from "@/lib/api-mutations"
 import { SaveItem } from "@/lib/saves"
-import { Button } from "@/components/ui/button"
 import { X } from "lucide-react"
 
 interface EditPostModalProps {
@@ -38,21 +37,24 @@ export function EditPostModal({ post, open, onClose, onSave }: EditPostModalProp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const payload = {
+      id: post.id,
+      data: {
+        title: formData.title,
+        author: formData.author,
+        content: formData.content, // ✅ correct field name
+        tag: formData.tag,
+        type: formData.type,
+      },
+    }
+    console.log("[EditPostModal] Sending payload:", payload)
     try {
-      await trigger({
-        id: post.id,
-        data: {
-          title: formData.title,
-          author: formData.author,
-          content: formData.content, // ✅ Correct field name
-          tag: formData.tag,
-          type: formData.type,
-        },
-      })
+      const result = await trigger(payload)
+      console.log("[EditPostModal] Result:", result)
       onSave()
       onClose()
     } catch (err) {
-      console.error(err)
+      console.error("[EditPostModal] Error:", err)
       alert("Failed to save changes")
     }
   }
@@ -62,7 +64,10 @@ export function EditPostModal({ post, open, onClose, onSave }: EditPostModalProp
       <div className="w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="flex items-center justify-between p-6 border-b dark:border-zinc-800">
           <h2 className="text-xl font-bold text-foreground">Edit Post</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-full transition">
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-full transition"
+          >
             <X className="size-5 text-muted-foreground" />
           </button>
         </div>
@@ -124,12 +129,21 @@ export function EditPostModal({ post, open, onClose, onSave }: EditPostModalProp
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t dark:border-zinc-800">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isMutating}>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isMutating}
+              className="px-4 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 text-sm font-medium text-foreground hover:bg-gray-100 dark:hover:bg-zinc-800 transition disabled:opacity-50"
+            >
               Cancel
-            </Button>
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white" disabled={isMutating}>
+            </button>
+            <button
+              type="submit"
+              disabled={isMutating}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition disabled:opacity-50"
+            >
               {isMutating ? "Saving..." : "Save Changes"}
-            </Button>
+            </button>
           </div>
         </form>
       </div>
