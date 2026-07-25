@@ -20,10 +20,7 @@ async function getUserIdFromToken(token: string): Promise<string | null> {
 
   try {
     const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        apikey: supabaseAnonKey,
-      },
+      headers: { Authorization: `Bearer ${token}`, apikey: supabaseAnonKey },
     });
     if (!response.ok) return null;
     const userData = await response.json();
@@ -34,77 +31,64 @@ async function getUserIdFromToken(token: string): Promise<string | null> {
   }
 }
 
-// ✅ EDIT Post – fixed params handling
-export async function PUT(
-  request: Request,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await context.params; // ✅ await the Promise
-
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders() });
-    }
-
-    const token = authHeader.split(" ")[1];
-    const userId = await getUserIdFromToken(token);
-    if (!userId) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401, headers: corsHeaders() });
-    }
-
-    const body = await request.json();
-    const { title, author, content, tag, type } = body;
-
-    const { rowCount } = await pool.query(
-      `UPDATE saved_posts 
-       SET title = $1, author = $2, content = $3, tag = $4, type = $5
-       WHERE id = $6 AND user_id = $7`,
-      [title, author, content, tag, type, id, userId]
-    );
-
-    if (rowCount === 0) {
-      return NextResponse.json({ error: "Post not found or unauthorized" }, { status: 404, headers: corsHeaders() });
-    }
-
-    return NextResponse.json({ success: true }, { status: 200, headers: corsHeaders() });
-  } catch (error) {
-    console.error("PUT error:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500, headers: corsHeaders() });
-  }
-}
-
-// ✅ DELETE Post – fixed params handling
 export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const start = Date.now();
+  console.log(`[DELETE] Request started at ${new Date().toISOString()}`);
+
   try {
     const { id } = await context.params;
+    console.log(`[DELETE] id = ${id}`);
 
     const authHeader = request.headers.get("Authorization");
+    console.log(`[DELETE] authHeader present: ${!!authHeader}`);
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders() });
+      console.error("[DELETE] Missing or invalid Authorization header");
+      return NextResponse.json(
+        { error: "Unauthorized – missing token" },
+        { status: 401, headers: corsHeaders() }
+      );
     }
 
     const token = authHeader.split(" ")[1];
     const userId = await getUserIdFromToken(token);
+    console.log(`[DELETE] userId = ${userId}`);
+
     if (!userId) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401, headers: corsHeaders() });
+      console.error("[DELETE] Invalid token – userId null");
+      return NextResponse.json(
+        { error: "Invalid session" },
+        { status: 401, headers: corsHeaders() }
+      );
     }
 
     const { rowCount } = await pool.query(
       "DELETE FROM saved_posts WHERE id = $1 AND user_id = $2",
       [id, userId]
     );
+    console.log(`[DELETE] rowCount = ${rowCount}`);
 
     if (rowCount === 0) {
-      return NextResponse.json({ error: "Post not found or unauthorized" }, { status: 404, headers: corsHeaders() });
+      console.warn("[DELETE] No rows deleted – post not found or unauthorized");
+      return NextResponse.json(
+        { error: "Post not found or unauthorized" },
+        { status: 404, headers: corsHeaders() }
+      );
     }
 
-    return NextResponse.json({ success: true }, { status: 200, headers: corsHeaders() });
+    console.log(`[DELETE] Success – ${rowCount} row(s) deleted in ${Date.now() - start}ms`);
+    return NextResponse.json(
+      { success: true },
+      { status: 200, headers: corsHeaders() }
+    );
   } catch (error) {
-    console.error("DELETE error:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500, headers: corsHeaders() });
+    console.error("[DELETE] Unhandled error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal Server Error" },
+      { status: 500, headers: corsHeaders() }
+    );
   }
 }
