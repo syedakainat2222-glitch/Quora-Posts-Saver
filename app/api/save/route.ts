@@ -61,14 +61,13 @@ async function getUserIdFromToken(token: string): Promise<string | null> {
   }
 }
 
-// --- POST handler ---
+// --- POST handler (unchanged) ---
 export async function POST(request: Request) {
   const requestId = Math.random().toString(36).substring(2, 10);
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] [POST] [${requestId}] Request received`);
 
   try {
-    // 1. Extract Authorization header
     const authHeader = request.headers.get("Authorization");
     console.log(`[${timestamp}] [POST] [${requestId}] Authorization header present: ${!!authHeader}`);
 
@@ -83,7 +82,6 @@ export async function POST(request: Request) {
     const token = authHeader.split(" ")[1];
     console.log(`[${timestamp}] [POST] [${requestId}] Extracted token (first 10 chars: ${token.substring(0, 10)}...)`);
 
-    // 2. Verify token and get user ID
     console.log(`[${timestamp}] [POST] [${requestId}] Calling getUserIdFromToken...`);
     const userId = await getUserIdFromToken(token);
     if (!userId) {
@@ -95,7 +93,6 @@ export async function POST(request: Request) {
     }
     console.log(`[${timestamp}] [POST] [${requestId}] User authenticated with ID: ${userId}`);
 
-    // 3. Parse request body
     let body;
     try {
       body = await request.json();
@@ -108,7 +105,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // 4. Validate required fields
     if (!body.title || !body.contentText) {
       console.warn(`[${timestamp}] [POST] [${requestId}] Missing required fields: title=${!!body.title}, contentText=${!!body.contentText}`);
       return NextResponse.json(
@@ -118,7 +114,6 @@ export async function POST(request: Request) {
     }
     console.log(`[${timestamp}] [POST] [${requestId}] Required fields present`);
 
-    // 5. Prepare DB query parameters
     const params = [
       userId,
       body.title,
@@ -130,7 +125,6 @@ export async function POST(request: Request) {
     ];
     console.log(`[${timestamp}] [POST] [${requestId}] DB params: [userId=${userId}, title="${body.title}", author="${body.author || 'Unknown Author'}", contentLength=${body.contentText.length}, url="${body.url || ''}", tag="${body.tag || 'General'}", type="${body.type || 'Post'}"]`);
 
-    // 6. Execute insert query
     console.log(`[${timestamp}] [POST] [${requestId}] Executing INSERT INTO saved_posts...`);
     try {
       const { rows } = await pool.query(
@@ -162,20 +156,24 @@ export async function POST(request: Request) {
   }
 }
 
-// --- GET handler ---
+// ✅ FIXED GET handler – returns 401 when token invalid
 export async function GET(request: Request) {
   const requestId = Math.random().toString(36).substring(2, 10);
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] [GET] [${requestId}] Request received`);
 
   try {
-    // 1. Extract Authorization header (optional)
+    // 1. Extract Authorization header
     const authHeader = request.headers.get("Authorization");
     console.log(`[${timestamp}] [GET] [${requestId}] Authorization header present: ${!!authHeader}`);
 
+    // ❌ If no token, return 401 (not 200 with empty array)
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      console.log(`[${timestamp}] [GET] [${requestId}] No valid token, returning empty array (200)`);
-      return NextResponse.json([], { status: 200, headers: corsHeaders() });
+      console.log(`[${timestamp}] [GET] [${requestId}] No token – returning 401`);
+      return NextResponse.json(
+        { error: "Missing or invalid Authorization header" },
+        { status: 401, headers: corsHeaders() }
+      );
     }
 
     const token = authHeader.split(" ")[1];
@@ -184,9 +182,14 @@ export async function GET(request: Request) {
     // 2. Verify token
     console.log(`[${timestamp}] [GET] [${requestId}] Calling getUserIdFromToken...`);
     const userId = await getUserIdFromToken(token);
+
+    // ❌ If token invalid, return 401 (not 200 with empty array)
     if (!userId) {
-      console.log(`[${timestamp}] [GET] [${requestId}] Invalid token, returning empty array (200)`);
-      return NextResponse.json([], { status: 200, headers: corsHeaders() });
+      console.log(`[${timestamp}] [GET] [${requestId}] Invalid token – returning 401`);
+      return NextResponse.json(
+        { error: "Invalid or expired session" },
+        { status: 401, headers: corsHeaders() }
+      );
     }
     console.log(`[${timestamp}] [GET] [${requestId}] User authenticated with ID: ${userId}`);
 
