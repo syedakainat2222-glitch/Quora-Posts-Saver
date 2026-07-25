@@ -20,7 +20,10 @@ async function getUserIdFromToken(token: string): Promise<string | null> {
 
   try {
     const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: { Authorization: `Bearer ${token}`, apikey: supabaseAnonKey },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: supabaseAnonKey,
+      },
     });
     if (!response.ok) return null;
     const userData = await response.json();
@@ -31,6 +34,70 @@ async function getUserIdFromToken(token: string): Promise<string | null> {
   }
 }
 
+// ✅ PUT – update a post
+export async function PUT(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  console.log(`[PUT] Request received at ${new Date().toISOString()}`);
+  try {
+    const { id } = await context.params;
+    console.log(`[PUT] ID: ${id}`);
+
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.error("[PUT] Unauthorized – missing token");
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401, headers: corsHeaders() }
+      );
+    }
+
+    const token = authHeader.split(" ")[1];
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      console.error("[PUT] Invalid session");
+      return NextResponse.json(
+        { error: "Invalid session" },
+        { status: 401, headers: corsHeaders() }
+      );
+    }
+
+    const body = await request.json();
+    console.log(`[PUT] Body:`, body);
+
+    const { title, author, content, tag, type } = body;
+
+    const { rowCount } = await pool.query(
+      `UPDATE saved_posts 
+       SET title = $1, author = $2, content = $3, tag = $4, type = $5
+       WHERE id = $6 AND user_id = $7`,
+      [title, author, content, tag, type, id, userId]
+    );
+
+    console.log(`[PUT] rowCount: ${rowCount}`);
+
+    if (rowCount === 0) {
+      return NextResponse.json(
+        { error: "Post not found or unauthorized" },
+        { status: 404, headers: corsHeaders() }
+      );
+    }
+
+    return NextResponse.json(
+      { success: true },
+      { status: 200, headers: corsHeaders() }
+    );
+  } catch (error) {
+    console.error("[PUT] Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500, headers: corsHeaders() }
+    );
+  }
+}
+
+// ✅ DELETE – remove a post
 export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string }> }
