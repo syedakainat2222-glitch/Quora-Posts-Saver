@@ -106,7 +106,6 @@ const fetcher = async (url: string) => {
   let res = await fetchWithToken(token || "")
   console.log("[fetcher] Initial response status:", res.status)
 
-  // If token expired (401) – refresh and retry once
   if (res.status === 401) {
     console.log("[fetcher] 401 received – attempting refresh")
     try {
@@ -116,7 +115,6 @@ const fetcher = async (url: string) => {
       console.log("[fetcher] Retry response status:", res.status)
     } catch (refreshError) {
       console.error("[fetcher] Refresh failed:", refreshError)
-      // If refresh fails, throw the error so SWR can handle it
       throw refreshError
     }
   }
@@ -140,7 +138,9 @@ export default function Page() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
 
-  const [userDisplayName, setUserDisplayName] = useState<string>("New User")
+  // --- Display name with per‑email key ---
+  const [userEmail, setUserEmail] = useState<string>("")
+  const [userDisplayName, setUserDisplayName] = useState<string>("User")
   const [inputName, setInputName] = useState<string>("")
 
   const [searchQuery, setSearchQuery] = useState("")
@@ -162,29 +162,35 @@ export default function Page() {
     if (!localToken) {
       setIsAuthenticated(false)
       router.push("/login")
-    } else {
-      setIsAuthenticated(true)
+      return
+    }
 
-      // ✅ Get user email and set display name
-      const savedName = localStorage.getItem("qsaver_display_name")
-      const email = localStorage.getItem("qsaver_user_email")
+    setIsAuthenticated(true)
+
+    // ✅ Get email and set display name from per‑email key
+    const email = localStorage.getItem("qsaver_user_email") || ""
+    setUserEmail(email)
+
+    if (email) {
+      const key = `qsaver_display_name_${email}`
+      const savedName = localStorage.getItem(key)
 
       if (savedName) {
         setUserDisplayName(savedName)
         setInputName(savedName)
-      } else if (email) {
-        // Use the local part of the email as the default name
+      } else {
+        // Derive default name from email (e.g., "john" from "john@gmail.com")
         const defaultName = email.split('@')[0] || "User"
         setUserDisplayName(defaultName)
         setInputName(defaultName)
-        // Optionally save it so it persists
-        localStorage.setItem("qsaver_display_name", defaultName)
-      } else {
-        // Fallback
-        setUserDisplayName("User")
-        setInputName("User")
+        localStorage.setItem(key, defaultName)
       }
+    } else {
+      // fallback (should not happen)
+      setUserDisplayName("User")
+      setInputName("User")
     }
+
     return () => {
       Object.values(timeouts.current).forEach(clearTimeout)
     }
@@ -365,6 +371,16 @@ export default function Page() {
     )
   }
 
+  // ---- UPDATE DISPLAY NAME (Settings) ----
+  const handleUpdateProfileName = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!inputName.trim() || !userEmail) return
+    const key = `qsaver_display_name_${userEmail}`
+    localStorage.setItem(key, inputName.trim())
+    setUserDisplayName(inputName.trim())
+    toast.success("Display name updated!")
+  }
+
   return (
     <main className="flex h-dvh w-full overflow-hidden bg-slate-50 dark:bg-zinc-950">
       <Sidebar
@@ -431,32 +447,57 @@ export default function Page() {
           </>
         ) : currentTab === "Settings" ? (
           <div className="flex-1 overflow-y-auto p-10">
-            <div className="mx-auto max-w-3xl">
-              <h1 className="mb-2 text-4xl font-black uppercase tracking-tighter">Settings</h1>
-              <p className="mb-10 text-muted-foreground">Manage your library preferences.</p>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="rounded-3xl border border-gray-100 bg-white p-8 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-                  <div className="mb-6 flex size-12 items-center justify-center rounded-2xl bg-blue-100 dark:bg-blue-900/30">
-                    <FileDown className="size-6 text-blue-600" />
+            <div className="mx-auto max-w-3xl space-y-8">
+              <div>
+                <h1 className="text-4xl font-black uppercase tracking-tighter">Settings</h1>
+                <p className="mb-10 text-muted-foreground">Manage your library preferences.</p>
+              </div>
+
+              {/* ─── Profile edit card ─── */}
+              <div className="rounded-3xl border border-gray-100 bg-white p-8 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+                <h3 className="text-xl font-bold">👤 Profile</h3>
+                <form onSubmit={handleUpdateProfileName} className="mt-4 space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Display name</label>
+                    <input
+                      type="text"
+                      value={inputName}
+                      onChange={(e) => setInputName(e.target.value)}
+                      placeholder="Enter your name"
+                      className="mt-1 w-full rounded-xl border border-gray-200 bg-white/50 px-4 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-white"
+                    />
                   </div>
-                  <h2 className="mb-3 text-xl font-bold">Export Data</h2>
-                  <p className="mb-8 text-sm text-muted-foreground">
-                    Download your library as CSV or JSON.
-                  </p>
-                  <div className="flex flex-col gap-3">
-                    <button
-                      onClick={() => exportToCSV(processedSaves)}
-                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/25 transition hover:bg-blue-700 active:scale-95"
-                    >
-                      Download CSV
-                    </button>
-                    <button
-                      onClick={() => exportToJSON(processedSaves)}
-                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-100 px-6 py-3 text-sm font-bold text-foreground transition hover:bg-gray-200 active:scale-95 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-                    >
-                      Download JSON
-                    </button>
-                  </div>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                  >
+                    Update name
+                  </button>
+                </form>
+              </div>
+
+              {/* Export card */}
+              <div className="rounded-3xl border border-gray-100 bg-white p-8 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+                <div className="mb-6 flex size-12 items-center justify-center rounded-2xl bg-blue-100 dark:bg-blue-900/30">
+                  <FileDown className="size-6 text-blue-600" />
+                </div>
+                <h2 className="mb-3 text-xl font-bold">Export Data</h2>
+                <p className="mb-8 text-sm text-muted-foreground">
+                  Download your library as CSV or JSON.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => exportToCSV(processedSaves)}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/25 transition hover:bg-blue-700 active:scale-95"
+                  >
+                    Download CSV
+                  </button>
+                  <button
+                    onClick={() => exportToJSON(processedSaves)}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-100 px-6 py-3 text-sm font-bold text-foreground transition hover:bg-gray-200 active:scale-95 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                  >
+                    Download JSON
+                  </button>
                 </div>
               </div>
             </div>
