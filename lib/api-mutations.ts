@@ -121,3 +121,21 @@ export function useDeleteTag() {
     return text ? JSON.parse(text) : { success: true }
   })
 }
+
+// --- Profile ---
+export function useUpdateProfile() {
+  return useSWRMutation("/api/profile", async (url, { arg }: { arg: { display_name: string } }) => {
+    const token = getToken()
+    const res = await fetch(`${API}/api/profile`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ display_name: arg.display_name }),
+    })
+    const text = await res.text()
+    if (!res.ok) throw new Error(text || `Update profile failed with status ${res.status}`)
+    return text ? JSON.parse(text) : { success: true }
+  })
+}
