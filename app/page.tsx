@@ -12,7 +12,7 @@ import { DeleteConfirmModal } from "@/components/modals/DeleteConfirmModal"
 import { BulkActionModal } from "@/components/modals/BulkActionModal"
 import { TagManager } from "@/components/tag-manager"
 import { useToast } from "@/lib/use-toast"
-import { useDuplicatePost, useBulkDelete, useBulkTagUpdate } from "@/lib/api-mutations"
+import { useDuplicatePost, useBulkDelete, useBulkTagUpdate, useUpdateProfile } from "@/lib/api-mutations"
 import { exportToCSV, exportToJSON } from "@/lib/export"
 import type { SaveItem, SaveKind } from "@/lib/saves"
 import { SortOption } from "@/components/sort-dropdown"
@@ -128,6 +128,15 @@ const fetcher = async (url: string) => {
   return res.json()
 }
 
+// --- Profile fetcher (separate SWR) ---
+const profileFetcher = async (url: string) => {
+  const token = localStorage.getItem("qsaver_session_token")
+  if (!token) throw new Error("No token")
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error("Failed to fetch profile")
+  return res.json()
+}
+
 export default function Page() {
   const router = useRouter()
   const { mutate: globalMutate } = useSWRConfig()
@@ -138,7 +147,7 @@ export default function Page() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
 
-  // --- Display name with per‑email key ---
+  // --- Display name from server ---
   const [userEmail, setUserEmail] = useState<string>("")
   const [userDisplayName, setUserDisplayName] = useState<string>("User")
   const [inputName, setInputName] = useState<string>("")
@@ -157,6 +166,7 @@ export default function Page() {
   const [pendingDeletions, setPendingDeletions] = useState<string[]>([])
   const timeouts = useRef<Record<string, NodeJS.Timeout>>({})
 
+  // --- Authentication check ---
   useEffect(() => {
     const localToken = localStorage.getItem("qsaver_session_token")
     if (!localToken) {
@@ -166,46 +176,44 @@ export default function Page() {
     }
 
     setIsAuthenticated(true)
-
-    // ✅ Get email and set display name from per‑email key
     const email = localStorage.getItem("qsaver_user_email") || ""
     setUserEmail(email)
-
-    if (email) {
-      const key = `qsaver_display_name_${email}`
-      const savedName = localStorage.getItem(key)
-
-      if (savedName) {
-        setUserDisplayName(savedName)
-        setInputName(savedName)
-      } else {
-        // Derive default name from email (e.g., "john" from "john@gmail.com")
-        const defaultName = email.split('@')[0] || "User"
-        setUserDisplayName(defaultName)
-        setInputName(defaultName)
-        localStorage.setItem(key, defaultName)
-      }
-    } else {
-      // fallback (should not happen)
-      setUserDisplayName("User")
-      setInputName("User")
-    }
-
-    return () => {
-      Object.values(timeouts.current).forEach(clearTimeout)
-    }
   }, [router])
 
+  // --- Fetch profile from server ---
+  const { data: profileData, mutate: mutateProfile } = useSWR<{ display_name: string }>(
+    isAuthenticated ? "/api/profile" : null,
+    profileFetcher,
+    { refreshInterval: 10000 } // refresh every 10s to sync across devices
+  )
+
+  // --- When profile loads, update local state ---
+  useEffect(() => {
+    if (profileData?.display_name) {
+      const name = profileData.display_name
+      setUserDisplayName(name)
+      setInputName(name)
+      // Also update localStorage for extension/offline fallback
+      if (userEmail) {
+        localStorage.setItem(`qsaver_display_name_${userEmail}`, name)
+      }
+    }
+  }, [profileData, userEmail])
+
+  // --- SWR for posts ---
   const { data, error, isLoading, mutate } = useSWR<ApiRow[]>(
     isAuthenticated ? "/api/save" : null,
     fetcher,
     { refreshInterval: 5000 }
   )
 
+  // --- Mutations ---
   const { trigger: duplicatePost } = useDuplicatePost()
   const { trigger: bulkDelete, isMutating: isBulkDeleting } = useBulkDelete()
   const { trigger: bulkTag, isMutating: isBulkTagging } = useBulkTagUpdate()
+  const { trigger: updateProfile, isMutating: isUpdatingProfile } = useUpdateProfile()
 
+  // --- Processed saves ---
   const processedSaves = useMemo(() => {
     if (!data || !Array.isArray(data)) return []
     let items = data
@@ -348,6 +356,25 @@ export default function Page() {
     }
   }, [selectedId])
 
+  // ---- UPDATE DISPLAY NAME (Settings) ----
+  const handleUpdateProfileName = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!inputName.trim() || !userEmail) return
+
+    try {
+      await updateProfile({ display_name: inputName.trim() })
+      // Update local state and localStorage
+      setUserDisplayName(inputName.trim())
+      localStorage.setItem(`qsaver_display_name_${userEmail}`, inputName.trim())
+      // Re-fetch profile to sync
+      mutateProfile()
+      toast.success("Display name updated across all devices!")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update name")
+      console.error("Update profile error:", err)
+    }
+  }
+
   // ---------- RENDER ----------
   if (isAuthenticated === null || isLoading) {
     return (
@@ -369,16 +396,6 @@ export default function Page() {
         </div>
       </main>
     )
-  }
-
-  // ---- UPDATE DISPLAY NAME (Settings) ----
-  const handleUpdateProfileName = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!inputName.trim() || !userEmail) return
-    const key = `qsaver_display_name_${userEmail}`
-    localStorage.setItem(key, inputName.trim())
-    setUserDisplayName(inputName.trim())
-    toast.success("Display name updated!")
   }
 
   return (
@@ -469,9 +486,10 @@ export default function Page() {
                   </div>
                   <button
                     type="submit"
-                    className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                    disabled={isUpdatingProfile}
+                    className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
                   >
-                    Update name
+                    {isUpdatingProfile ? "Saving..." : "Update name"}
                   </button>
                 </form>
               </div>
