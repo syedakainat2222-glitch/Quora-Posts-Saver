@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import useSWR from "swr"
 import {
   HardDrive,
@@ -175,6 +176,19 @@ export function Sidebar({
             <LogOut className="size-4.5" />
           </button>
         </div>
+      </div>
+
+      {/* ─── Legal footer links ─── */}
+      <div className="px-3 pb-4 flex justify-center gap-4 text-[11px] text-muted-foreground">
+        <Link href="/privacy" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+          Privacy
+        </Link>
+        <Link href="/disclaimer" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+          Disclaimer
+        </Link>
+        <Link href="/terms" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+          Terms
+        </Link>
       </div>
     </aside>
   )
