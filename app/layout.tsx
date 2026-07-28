@@ -6,7 +6,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
-  title: 'Q-Saver Cloud — Save your Quora archive',
+  title: 'Quora Posts Saver Cloud — Save your Quora archive',
   description:
     'A cloud-connected reading dashboard for saving, organizing, and exporting Quora posts and replies.',
   generator: 'v0.app',
