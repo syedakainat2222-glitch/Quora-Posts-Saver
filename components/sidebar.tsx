@@ -76,7 +76,7 @@ export function Sidebar({
           <HardDrive className="size-5" />
         </div>
         <div className="leading-tight">
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">Q-Saver</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Quora Saver</p>
           <p className="text-xs text-muted-foreground">Cloud</p>
         </div>
       </div>
