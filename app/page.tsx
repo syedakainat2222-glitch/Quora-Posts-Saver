@@ -16,7 +16,8 @@ import { useDuplicatePost, useBulkDelete, useBulkTagUpdate, useUpdateProfile } f
 import { exportToCSV, exportToJSON } from "@/lib/export"
 import type { SaveItem, SaveKind } from "@/lib/saves"
 import { SortOption } from "@/components/sort-dropdown"
-import { Edit2, Trash2, Copy, Share2, Layers, FileDown } from "lucide-react"
+import { Edit2, Trash2, Copy, Share2, Layers, FileDown, AlertTriangle } from "lucide-react"
+import Link from "next/link"
 
 const API = "https://quora-posts-saver2.vercel.app"
 
@@ -517,6 +518,23 @@ export default function Page() {
                     Download JSON
                   </button>
                 </div>
+              </div>
+
+              {/* Account Security / Danger Zone */}
+              <div className="rounded-3xl border border-red-100 bg-red-50/30 p-8 shadow-xl dark:border-red-900/20 dark:bg-red-900/5">
+                <div className="mb-6 flex size-12 items-center justify-center rounded-2xl bg-red-100 dark:bg-red-900/30">
+                  <AlertTriangle className="size-6 text-red-600" />
+                </div>
+                <h2 className="mb-3 text-xl font-bold text-red-800 dark:text-red-400">Account</h2>
+                <p className="mb-8 text-sm text-red-600/80 dark:text-red-400/60">
+                  Manage your account deletion and data removal requests.
+                </p>
+                <Link
+                  href="/delete-account"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-red-500/25 transition hover:bg-red-700 active:scale-95"
+                >
+                  Request Account Deletion
+                </Link>
               </div>
             </div>
           </div>
